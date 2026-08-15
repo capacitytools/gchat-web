@@ -1,0 +1,16 @@
+{
+  "name": "G-Chat Messenger",
+  "short_name": "G-Chat",
+  "display": "standalone",
+  "start_url": "/",
+  "background_color": "#F8FAFC",
+  "theme_color": "#16A34A",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
