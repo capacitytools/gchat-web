@@ -1,9 +1,9 @@
-import { GChatApp } from "@/components/gchat-app";
+import { SupabaseChatApp } from "@/components/supabase-chat-app";
 
 export default function HomePage() {
   return (
     <main>
-      <GChatApp />
+      <SupabaseChatApp />
     </main>
   );
 }
