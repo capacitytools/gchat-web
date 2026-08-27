@@ -20,52 +20,118 @@ import {
   Send,
   Wallet,
 } from "lucide-react";
+
 import { AuthForm } from "@/components/auth-form";
 import { GButton } from "@/components/gbutton";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
-import type { ChatRow, MessageRow } from "@/lib/types";
+import type {
+  ChatRow,
+  MessageProfile,
+  MessageRow,
+} from "@/lib/types";
 
 type Tab = "chats" | "feed" | "calls" | "wallet";
+
+/**
+ * Supabase can return a relationship such as profiles(...)
+ * as an array, even when the relationship represents one profile.
+ *
+ * This type represents the raw response we receive from Supabase.
+ */
+type RawMessageRow = {
+  id: string;
+  chat_id: string;
+  user_id: string;
+  text: string;
+  created_at: string;
+  profiles:
+    | MessageProfile[]
+    | MessageProfile
+    | null;
+};
+
+/**
+ * Convert the Supabase relationship response into the
+ * MessageRow shape used throughout the application.
+ */
+function normalizeMessage(row: RawMessageRow): MessageRow {
+  let profile: MessageProfile | null = null;
+
+  if (Array.isArray(row.profiles)) {
+    profile = row.profiles[0] ?? null;
+  } else if (row.profiles) {
+    profile = row.profiles;
+  }
+
+  return {
+    id: row.id,
+    chat_id: row.chat_id,
+    user_id: row.user_id,
+    text: row.text,
+    created_at: row.created_at,
+    profiles: profile,
+  };
+}
 
 export function SupabaseChatApp() {
   const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+
   const [tab, setTab] = useState<Tab>("chats");
+
   const [chats, setChats] = useState<ChatRow[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [draft, setDraft] = useState("");
+
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState("");
+
   const [loadingChats, setLoadingChats] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
+
   const [copied, setCopied] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  /**
+   * Prevent hydration mismatch.
+   */
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  useEffect(() => {    const client = supabase;
+  /**
+   * Listen for Supabase authentication changes.
+   */
+  useEffect(() => {
+    const client = supabase;
 
     if (!client) {
       return;
     }
 
-    client.auth
+    void client.auth
       .getSession()
-      .then(({ data }) => setUser(data.session?.user ?? null));
+      .then(({ data }) => {
+        setUser(data.session?.user ?? null);
+      });
 
-    const { data } = client.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: authListener,
+    } = client.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
 
     return () => {
-      data.subscription.unsubscribe();
+      authListener.subscription.unsubscribe();
     };
   }, []);
 
+  /**
+   * Make sure the logged-in user has a profile.
+   */
   const ensureProfile = useCallback(async () => {
     const client = supabase;
 
@@ -77,42 +143,75 @@ export function SupabaseChatApp() {
       ? user.email.split("@")[0]
       : "G-User";
 
-    await client.from("profiles").upsert(
-      {
-        id: user.id,
-        display_name: fallbackName,
-      },
-      {
-        onConflict: "id",
-        ignoreDuplicates: true,
-      }
-    );
+    const { error: profileError } = await client
+      .from("profiles")
+      .upsert(
+        {
+          id: user.id,
+          display_name: fallbackName,
+        },
+        {
+          onConflict: "id",
+          ignoreDuplicates: true,
+        }
+      );
+
+    if (profileError) {
+      console.error(
+        "Could not ensure user profile:",
+        profileError.message
+      );
+    }
   }, [user]);
 
+  /**
+   * Reset active chat when the logged-in user changes.
+   */
   useEffect(() => {
     setActiveChatId(null);
     setMessages([]);
   }, [user?.id]);
 
+  /**
+   * Create/update the user's profile after authentication.
+   */
   useEffect(() => {
     void ensureProfile();
   }, [ensureProfile]);
+
+  /**
+   * Current active chat.
+   */
   const activeChat = useMemo(() => {
-    return chats.find((chat) => chat.id === activeChatId) ?? null;
+    return (
+      chats.find((chat) => chat.id === activeChatId) ??
+      null
+    );
   }, [chats, activeChatId]);
 
-  const addMessage = useCallback((message: MessageRow) => {
-    setMessages((previousMessages) => {
-      const exists = previousMessages.some((item) => item.id === message.id);
+  /**
+   * Add a message without creating duplicates.
+   */
+  const addMessage = useCallback(
+    (message: MessageRow) => {
+      setMessages((previousMessages) => {
+        const exists = previousMessages.some(
+          (item) => item.id === message.id
+        );
 
-      if (exists) {
-        return previousMessages;
-      }
+        if (exists) {
+          return previousMessages;
+        }
 
-      return [...previousMessages, message];
-    });
-  }, []);
+        return [...previousMessages, message];
+      });
+    },
+    []
+  );
 
+  /**
+   * Fetch all chats belonging to the logged-in user.
+   */
   const fetchChats = useCallback(async () => {
     const client = supabase;
 
@@ -123,21 +222,34 @@ export function SupabaseChatApp() {
     setLoadingChats(true);
     setError("");
 
-    const { data, error: fetchError } = await client
+    const {
+      data,
+      error: fetchError,
+    } = await client
       .from("chat_members")
-      .select("chat_id, chats(id, name, created_at, created_by)")
+      .select(
+        "chat_id, chats(id, name, created_at, created_by)"
+      )
       .eq("user_id", user.id)
-      .order("joined_at", { ascending: false });
+      .order("joined_at", {
+        ascending: false,
+      });
 
     if (fetchError) {
       setError(fetchError.message);
     } else {
-      const rows = (data ?? []) as Array<{
+      const rows = (data ?? []) as unknown as Array<{
         chats: ChatRow | ChatRow[] | null;
       }>;
 
       const mapped = rows
-        .map((row) => (Array.isArray(row.chats) ? row.chats[0] : row.chats))
+        .map((row) => {
+          if (Array.isArray(row.chats)) {
+            return row.chats[0] ?? null;
+          }
+
+          return row.chats;
+        })
         .filter(Boolean) as ChatRow[];
 
       setChats(mapped);
@@ -145,6 +257,10 @@ export function SupabaseChatApp() {
 
     setLoadingChats(false);
   }, [user]);
+
+  /**
+   * Load chats when a user is authenticated.
+   */
   useEffect(() => {
     if (user) {
       void fetchChats();
@@ -153,6 +269,10 @@ export function SupabaseChatApp() {
     }
   }, [user, fetchChats]);
 
+  /**
+   * Load messages for the active chat and subscribe
+   * to Supabase Realtime INSERT events.
+   */
   useEffect(() => {
     const client = supabase;
 
@@ -168,25 +288,47 @@ export function SupabaseChatApp() {
         return;
       }
 
-      const { data, error: messagesError } = await client
+      const {
+        data,
+        error: messagesError,
+      } = await client
         .from("messages")
         .select(
           "id, chat_id, user_id, text, created_at, profiles(id, username, display_name)"
         )
         .eq("chat_id", activeChatId)
-        .order("created_at", { ascending: true });
+        .order("created_at", {
+          ascending: true,
+        });
 
-      if (!cancelled) {
-        if (messagesError) {
-          setError(messagesError.message);
-        } else {
-          setMessages((data ?? []) as MessageRow[]);
-        }
+      if (cancelled) {
+        return;
       }
+
+      if (messagesError) {
+        setError(messagesError.message);
+        return;
+      }
+
+      /**
+       * Supabase may infer profiles as an array.
+       * We deliberately convert through unknown because
+       * normalizeMessage handles both array and object forms.
+       */
+      const rows = (data ?? []) as unknown as RawMessageRow[];
+
+      const normalizedMessages = rows.map(
+        normalizeMessage
+      );
+
+      setMessages(normalizedMessages);
     }
 
     void loadMessages();
 
+    /**
+     * Realtime subscription.
+     */
     const channel = client
       .channel(`messages:${activeChatId}`)
       .on(
@@ -194,10 +336,51 @@ export function SupabaseChatApp() {
         {
           event: "INSERT",
           schema: "public",
-          table: "messages",          filter: `chat_id=eq.${activeChatId}`,
+          table: "messages",
+          filter: `chat_id=eq.${activeChatId}`,
         },
-        (payload) => {
-          addMessage(payload.new as MessageRow);
+        async (payload) => {
+          if (cancelled) {
+            return;
+          }
+
+          const inserted = payload.new as {
+            id: string;
+            chat_id: string;
+            user_id: string;
+            text: string;
+            created_at: string;
+          };
+
+          /**
+           * Realtime INSERT payloads do not include the
+           * joined profiles relationship, so fetch the
+           * sender profile separately.
+           */
+          let profile: MessageProfile | null = null;
+
+          const {
+            data: profileData,
+          } = await client
+            .from("profiles")
+            .select("id, username, display_name")
+            .eq("id", inserted.user_id)
+            .maybeSingle();
+
+          if (profileData) {
+            profile = profileData as MessageProfile;
+          }
+
+          const realtimeMessage: MessageRow = {
+            id: inserted.id,
+            chat_id: inserted.chat_id,
+            user_id: inserted.user_id,
+            text: inserted.text,
+            created_at: inserted.created_at,
+            profiles: profile,
+          };
+
+          addMessage(realtimeMessage);
         }
       )
       .subscribe();
@@ -208,10 +391,19 @@ export function SupabaseChatApp() {
     };
   }, [activeChatId, addMessage]);
 
+  /**
+   * Scroll to the latest message.
+   */
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ block: "end" });
+    messagesEndRef.current?.scrollIntoView({
+      block: "end",
+      behavior: "smooth",
+    });
   }, [messages.length, activeChatId]);
 
+  /**
+   * Create a new chat.
+   */
   async function createChat() {
     const client = supabase;
 
@@ -224,7 +416,10 @@ export function SupabaseChatApp() {
     setCreatingChat(true);
     setError("");
 
-    const { data: chat, error: chatError } = await client
+    const {
+      data: chat,
+      error: chatError,
+    } = await client
       .from("chats")
       .insert({
         name: "New conversation",
@@ -234,22 +429,35 @@ export function SupabaseChatApp() {
       .single();
 
     if (chatError || !chat) {
-      setError(chatError?.message ?? "Could not create chat.");
+      setError(
+        chatError?.message ??
+          "Could not create chat."
+      );
+
       setCreatingChat(false);
       return;
     }
 
-    const { error: memberError } = await client.from("chat_members").insert({
-      chat_id: chat.id,
-      user_id: user.id,
-      role: "owner",
-    });
+    const {
+      error: memberError,
+    } = await client
+      .from("chat_members")
+      .insert({
+        chat_id: chat.id,
+        user_id: user.id,
+        role: "owner",
+      });
+
     if (memberError) {
       setError(memberError.message);
     } else {
       const newChat = chat as ChatRow;
 
-      setChats((previousChats) => [newChat, ...previousChats]);
+      setChats((previousChats) => [
+        newChat,
+        ...previousChats,
+      ]);
+
       setActiveChatId(newChat.id);
       setTab("chats");
     }
@@ -257,6 +465,9 @@ export function SupabaseChatApp() {
     setCreatingChat(false);
   }
 
+  /**
+   * Join an existing chat using its ID.
+   */
   async function joinChat() {
     const client = supabase;
 
@@ -267,6 +478,7 @@ export function SupabaseChatApp() {
     const chatId = joinCode.trim();
 
     if (!chatId) {
+      setError("Please enter a chat ID.");
       return;
     }
 
@@ -274,11 +486,15 @@ export function SupabaseChatApp() {
 
     setError("");
 
-    const { error: joinError } = await client.from("chat_members").insert({
-      chat_id: chatId,
-      user_id: user.id,
-      role: "member",
-    });
+    const {
+      error: joinError,
+    } = await client
+      .from("chat_members")
+      .insert({
+        chat_id: chatId,
+        user_id: user.id,
+        role: "member",
+      });
 
     if (joinError) {
       setError(joinError.message);
@@ -288,11 +504,15 @@ export function SupabaseChatApp() {
     }
   }
 
+  /**
+   * Send a text message.
+   */
   async function sendMessage() {
     const client = supabase;
 
     if (!client || !user || !activeChat) {
-      return;    }
+      return;
+    }
 
     const text = draft.trim();
 
@@ -300,9 +520,13 @@ export function SupabaseChatApp() {
       return;
     }
 
+    setError("");
     setDraft("");
 
-    const { data, error: sendError } = await client
+    const {
+      data,
+      error: sendError,
+    } = await client
       .from("messages")
       .insert({
         chat_id: activeChat.id,
@@ -313,12 +537,47 @@ export function SupabaseChatApp() {
       .single();
 
     if (sendError) {
+      setDraft(text);
       setError(sendError.message);
-    } else if (data) {
-      addMessage(data as MessageRow);
+      return;
+    }
+
+    if (data) {
+      /**
+       * Newly inserted messages don't contain the joined
+       * profile relationship, so attach the current user's
+       * profile when possible.
+       */
+      let profile: MessageProfile | null = null;
+
+      const {
+        data: profileData,
+      } = await client
+        .from("profiles")
+        .select("id, username, display_name")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileData) {
+        profile = profileData as MessageProfile;
+      }
+
+      const sentMessage: MessageRow = {
+        id: data.id,
+        chat_id: data.chat_id,
+        user_id: data.user_id,
+        text: data.text,
+        created_at: data.created_at,
+        profiles: profile,
+      };
+
+      addMessage(sentMessage);
     }
   }
 
+  /**
+   * Sign out.
+   */
   async function signOut() {
     const client = supabase;
 
@@ -327,24 +586,38 @@ export function SupabaseChatApp() {
     }
 
     await client.auth.signOut();
+
+    setActiveChatId(null);
+    setMessages([]);
+    setChats([]);
   }
 
+  /**
+   * Copy the complete chat ID.
+   */
   async function copyInviteId() {
     if (!activeChat) {
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(activeChat.id);
+      await navigator.clipboard.writeText(
+        activeChat.id
+      );
+
       setCopied(true);
 
       window.setTimeout(() => {
         setCopied(false);
       }, 2000);
-    } catch {      setError("Clipboard copy failed.");
+    } catch {
+      setError("Clipboard copy failed.");
     }
   }
 
+  /**
+   * Prevent hydration mismatch.
+   */
   if (!mounted) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gbackground dark:bg-gdark-background">
@@ -355,16 +628,25 @@ export function SupabaseChatApp() {
     );
   }
 
+  /**
+   * Supabase setup screen.
+   */
   if (!isSupabaseConfigured || !supabase) {
     return <SetupScreen />;
   }
 
+  /**
+   * Authentication screen.
+   */
   if (!user) {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-gbackground dark:bg-gdark-background">
         <header className="sticky top-0 z-20 border-b border-gborder bg-white/95 px-4 py-3 backdrop-blur dark:border-gdark-border dark:bg-gdark-surface/95">
           <div className="flex items-center justify-between">
-            <h1 className="font-heading text-xl font-semibold">G-Chat</h1>
+            <h1 className="font-heading text-xl font-semibold">
+              G-Chat
+            </h1>
+
             <span className="rounded-full bg-gpurple-primary/10 px-3 py-1 text-xs font-medium text-gpurple-primary">
               Phase 1
             </span>
@@ -377,8 +659,10 @@ export function SupabaseChatApp() {
               <h2 className="font-heading text-lg font-semibold">
                 Welcome to G-Chat
               </h2>
+
               <p className="mt-2 text-sm text-gmuted dark:text-gdark-muted">
-                Create an account or sign in to start real messaging.
+                Create an account or sign in to start
+                real messaging.
               </p>
             </div>
 
@@ -389,7 +673,9 @@ export function SupabaseChatApp() {
     );
   }
 
-  const showChatList = tab === "chats" && !activeChat;
+  const showChatList =
+    tab === "chats" && !activeChat;
+
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-gbackground dark:bg-gdark-background">
       <header className="sticky top-0 z-20 border-b border-gborder bg-white/95 px-4 py-3 backdrop-blur dark:border-gdark-border dark:bg-gdark-surface/95">
@@ -397,22 +683,28 @@ export function SupabaseChatApp() {
           <div className="flex items-center gap-3">
             <button
               aria-label="Back"
-              onClick={() => setActiveChatId(null)}
+              onClick={() => {
+                setActiveChatId(null);
+              }}
               className="rounded-full p-2 hover:bg-gborder/40 dark:hover:bg-gdark-border/40"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
 
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ggreen-primary/10 font-heading font-semibold text-ggreen-primary">
-              {activeChat.name.charAt(0).toUpperCase()}
+              {activeChat.name
+                .charAt(0)
+                .toUpperCase()}
             </div>
 
             <div className="min-w-0 flex-1">
               <h1 className="truncate font-heading text-lg font-semibold leading-6">
                 {activeChat.name}
               </h1>
+
               <p className="text-xs text-gmuted dark:text-gdark-muted">
-                Invite ID: {activeChat.id.slice(0, 8)}
+                Invite ID:{" "}
+                {activeChat.id.slice(0, 8)}
               </p>
             </div>
 
@@ -427,7 +719,10 @@ export function SupabaseChatApp() {
         ) : (
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="font-heading text-xl font-semibold">G-Chat</h1>
+              <h1 className="font-heading text-xl font-semibold">
+                G-Chat
+              </h1>
+
               <p className="truncate text-xs text-gmuted dark:text-gdark-muted">
                 {user.email ?? "Signed in"}
               </p>
@@ -439,7 +734,8 @@ export function SupabaseChatApp() {
               className="rounded-full p-2 text-gmuted hover:bg-gborder/40 dark:text-gdark-muted dark:hover:bg-gdark-border/40"
             >
               <LogOut className="h-5 w-5" />
-            </button>          </div>
+            </button>
+          </div>
         )}
       </header>
 
@@ -465,7 +761,8 @@ export function SupabaseChatApp() {
             ) : null}
 
             {messages.map((message) => {
-              const isOwnMessage = message.user_id === user.id;
+              const isOwnMessage =
+                message.user_id === user.id;
 
               const senderName =
                 message.profiles?.display_name ||
@@ -481,25 +778,34 @@ export function SupabaseChatApp() {
                     <p className="whitespace-pre-wrap break-words text-[15px]">
                       {message.text}
                     </p>
+
                     <p className="mt-1 text-right text-[11px] text-white/80">
-                      {formatTime(message.created_at)} ✓✓
+                      {formatTime(
+                        message.created_at
+                      )}{" "}
+                      ✓✓
                     </p>
                   </article>
                 );
               }
 
-              return (                <article
+              return (
+                <article
                   key={message.id}
                   className="mr-auto w-fit max-w-[85%] rounded-gbubble bg-glight-bubble px-4 py-3 text-gtext shadow-sm dark:bg-gdark-bubble dark:text-gdark-text"
                 >
                   <p className="text-xs font-medium text-gpurple-primary">
                     {senderName}
                   </p>
+
                   <p className="mt-1 whitespace-pre-wrap break-words text-[15px]">
                     {message.text}
                   </p>
+
                   <p className="mt-1 text-right text-[11px] text-gmuted dark:text-gdark-muted">
-                    {formatTime(message.created_at)}
+                    {formatTime(
+                      message.created_at
+                    )}
                   </p>
                 </article>
               );
@@ -515,19 +821,25 @@ export function SupabaseChatApp() {
               <h2 className="font-heading text-lg font-semibold">
                 Join existing chat
               </h2>
+
               <p className="mt-2 text-sm text-gmuted dark:text-gdark-muted">
-                Paste a chat ID to join a shared conversation.
+                Paste a chat ID to join a shared
+                conversation.
               </p>
 
               <div className="mt-3 flex gap-2">
                 <input
                   value={joinCode}
-                  onChange={(event) => setJoinCode(event.target.value)}
+                  onChange={(event) =>
+                    setJoinCode(event.target.value)
+                  }
                   placeholder="Paste chat ID"
                   className="min-h-[48px] flex-1 rounded-gbutton border border-gborder bg-white px-4 py-3 text-[15px] outline-none focus:border-ggreen-primary dark:border-gdark-border dark:bg-gdark-surface"
                 />
 
-                <GButton onClick={joinChat}>Join</GButton>
+                <GButton onClick={joinChat}>
+                  Join
+                </GButton>
               </div>
             </div>
 
@@ -537,17 +849,27 @@ export function SupabaseChatApp() {
               </div>
             ) : null}
 
-            {chats.length === 0 && !loadingChats ? (              <div className="rounded-gcard border border-gborder bg-white p-6 dark:border-gdark-border dark:bg-gdark-surface">
+            {chats.length === 0 &&
+            !loadingChats ? (
+              <div className="rounded-gcard border border-gborder bg-white p-6 dark:border-gdark-border dark:bg-gdark-surface">
                 <h2 className="font-heading text-lg font-semibold">
                   Create your first real chat
                 </h2>
+
                 <p className="mt-2 text-sm text-gmuted dark:text-gdark-muted">
-                  This chat is stored in your Supabase database and supports
+                  This chat is stored in your
+                  Supabase database and supports
                   realtime messaging.
                 </p>
+
                 <div className="mt-4">
-                  <GButton onClick={createChat} disabled={creatingChat}>
-                    {creatingChat ? "Creating..." : "Create chat"}
+                  <GButton
+                    onClick={createChat}
+                    disabled={creatingChat}
+                  >
+                    {creatingChat
+                      ? "Creating..."
+                      : "Create chat"}
                   </GButton>
                 </div>
               </div>
@@ -558,18 +880,28 @@ export function SupabaseChatApp() {
                 {chats.map((chat) => (
                   <button
                     key={chat.id}
-                    onClick={() => setActiveChatId(chat.id)}
+                    onClick={() =>
+                      setActiveChatId(chat.id)
+                    }
                     className="w-full rounded-gcard border border-gborder bg-white p-3 text-left hover:border-ggreen-primary/50 dark:border-gdark-border dark:bg-gdark-surface"
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex h-11 w-11 items-center justify-center rounded-full bg-ggreen-primary/10 font-heading font-semibold text-ggreen-primary">
-                        {chat.name.charAt(0).toUpperCase()}
+                        {chat.name
+                          .charAt(0)
+                          .toUpperCase()}
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{chat.name}</p>
+                        <p className="truncate font-medium">
+                          {chat.name}
+                        </p>
+
                         <p className="truncate text-sm text-gmuted dark:text-gdark-muted">
-                          Created {formatDate(chat.created_at)}
+                          Created{" "}
+                          {formatDate(
+                            chat.created_at
+                          )}
                         </p>
                       </div>
                     </div>
@@ -586,6 +918,7 @@ export function SupabaseChatApp() {
             text="G-Feed is active. Social posts, stories, and monetized creator content connect here in the next build phase."
           />
         ) : null}
+
         {tab === "calls" ? (
           <EmptyPanel
             title="Calls"
@@ -606,11 +939,16 @@ export function SupabaseChatApp() {
           <div className="mx-auto flex w-full max-w-md items-end gap-2">
             <textarea
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) =>
+                setDraft(event.target.value)
+              }
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey
+                ) {
                   event.preventDefault();
-                  sendMessage();
+                  void sendMessage();
                 }
               }}
               placeholder="Message"
@@ -619,7 +957,7 @@ export function SupabaseChatApp() {
             />
 
             <button
-              onClick={sendMessage}
+              onClick={() => void sendMessage()}
               aria-label="Send message"
               className="flex h-12 w-12 items-center justify-center rounded-gbutton bg-ggreen-primary text-white active:bg-ggreen-deep"
             >
@@ -635,21 +973,26 @@ export function SupabaseChatApp() {
             active={tab === "chats"}
             label="Chats"
             onClick={() => {
-              setTab("chats");              setActiveChatId(null);
+              setTab("chats");
+              setActiveChatId(null);
             }}
-            icon={<MessageCircle className="h-5 w-5" />}
+            icon={
+              <MessageCircle className="h-5 w-5" />
+            }
           />
 
           <TabButton
             active={tab === "feed"}
             label="Feed"
             onClick={() => setTab("feed")}
-            icon={<Newspaper className="h-5 w-5" />}
+            icon={
+              <Newspaper className="h-5 w-5" />
+            }
           />
 
           <div className="flex justify-center">
             <button
-              onClick={createChat}
+              onClick={() => void createChat()}
               aria-label="New chat"
               className="-mt-8 flex h-14 w-14 items-center justify-center rounded-full bg-ggreen-primary text-white shadow-lg shadow-ggreen-primary/30 active:bg-ggreen-deep"
             >
@@ -661,14 +1004,18 @@ export function SupabaseChatApp() {
             active={tab === "calls"}
             label="Calls"
             onClick={() => setTab("calls")}
-            icon={<Phone className="h-5 w-5" />}
+            icon={
+              <Phone className="h-5 w-5" />
+            }
           />
 
           <TabButton
             active={tab === "wallet"}
             label="Wallet"
             onClick={() => setTab("wallet")}
-            icon={<Wallet className="h-5 w-5" />}
+            icon={
+              <Wallet className="h-5 w-5" />
+            }
           />
         </div>
       </nav>
@@ -676,20 +1023,28 @@ export function SupabaseChatApp() {
   );
 }
 
+/**
+ * Supabase setup screen.
+ */
 function SetupScreen() {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-gbackground dark:bg-gdark-background">
       <header className="sticky top-0 z-20 border-b border-gborder bg-white/95 px-4 py-3 backdrop-blur dark:border-gdark-border dark:bg-gdark-surface/95">
-        <h1 className="font-heading text-xl font-semibold">G-Chat Setup</h1>
+        <h1 className="font-heading text-xl font-semibold">
+          G-Chat Setup
+        </h1>
       </header>
 
       <main className="flex-1 p-4">
-        <div className="rounded-gcard border border-gwarning/40 bg-gwarning/10 p-4">          <h2 className="font-heading text-lg font-semibold">
-            Supabase environment variables are missing
+        <div className="rounded-gcard border border-gwarning/40 bg-gwarning/10 p-4">
+          <h2 className="font-heading text-lg font-semibold">
+            Supabase environment variables are
+            missing
           </h2>
 
           <p className="mt-2 text-sm text-gtext dark:text-gdark-text">
-            Add these environment variables in Vercel, then redeploy:
+            Add these environment variables in
+            Vercel, then redeploy:
           </p>
 
           <ul className="mt-3 list-disc pl-5 text-sm text-gtext dark:text-gdark-text">
@@ -698,7 +1053,8 @@ function SetupScreen() {
           </ul>
 
           <p className="mt-3 text-sm text-gtext dark:text-gdark-text">
-            You can find them in Supabase under Project Settings → API.
+            You can find them in Supabase under
+            Project Settings → API.
           </p>
         </div>
       </main>
@@ -706,11 +1062,24 @@ function SetupScreen() {
   );
 }
 
-function EmptyPanel({ title, text }: { title: string; text: string }) {
+/**
+ * Empty section used for features that will be
+ * developed in later G-Chat phases.
+ */
+function EmptyPanel({
+  title,
+  text,
+}: {
+  title: string;
+  text: string;
+}) {
   return (
     <section className="p-4 pb-36">
       <div className="rounded-gcard border border-gborder bg-white p-6 dark:border-gdark-border dark:bg-gdark-surface">
-        <h2 className="font-heading text-lg font-semibold">{title}</h2>
+        <h2 className="font-heading text-lg font-semibold">
+          {title}
+        </h2>
+
         <p className="mt-2 text-sm text-gmuted dark:text-gdark-muted">
           {text}
         </p>
@@ -719,6 +1088,9 @@ function EmptyPanel({ title, text }: { title: string; text: string }) {
   );
 }
 
+/**
+ * Bottom navigation button.
+ */
 function TabButton({
   active,
   label,
@@ -733,7 +1105,10 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      aria-current={active ? "page" : undefined}      className={`flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-xs ${
+      aria-current={
+        active ? "page" : undefined
+      }
+      className={`flex flex-col items-center gap-1 rounded-lg px-2 py-1 text-xs ${
         active
           ? "text-gpurple-primary"
           : "text-gmuted dark:text-gdark-muted"
@@ -745,16 +1120,28 @@ function TabButton({
   );
 }
 
+/**
+ * Format message time.
+ */
 function formatTime(value: string) {
-  return new Date(value).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return new Date(value).toLocaleTimeString(
+    [],
+    {
+      hour: "2-digit",
+      minute: "2-digit",
+    }
+  );
 }
 
+/**
+ * Format chat creation date.
+ */
 function formatDate(value: string) {
-  return new Date(value).toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-  });
+  return new Date(value).toLocaleDateString(
+    [],
+    {
+      month: "short",
+      day: "numeric",
+    }
+  );
 }
