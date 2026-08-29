@@ -3,10 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { 
   ArrowLeft, MessageCircle, Newspaper, Phone, Plus, Send, Wallet, LogOut, 
-  Loader2, Smile, Paperclip, Camera, Mic, Image as ImageIcon, MapPin, 
-  User, FileText, List, Calendar, Sparkles, X
+  Loader2, Smile, Paperclip, Camera, Mic, Image as ImageIcon, X
 } from "lucide-react";
-import { GButton } from "@/components/gbutton";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import imageCompression from "browser-image-compression";
@@ -47,12 +45,11 @@ export function GChatApp() {
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [newChatUsername, setNewChatUsername] = useState("");
   const [showNewChatModal, setShowNewChatModal] = useState(false);
 
-  // 1. Auth State Management
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -68,10 +65,8 @@ export function GChatApp() {
     return () => { authListener.subscription.unsubscribe(); };
   }, [router]);
 
-  // 2. Fetch Chats
   useEffect(() => { if (user) fetchChats(); }, [user]);
 
-  // 3. Fetch & Subscribe to Messages
   useEffect(() => {
     if (activeChatId) {
       fetchMessages(activeChatId);
@@ -96,12 +91,12 @@ export function GChatApp() {
 
   const fetchMessages = async (chatId: string) => {
     const { data } = await supabase.from("messages").select("id, chat_id, user_id, text, media_url, created_at").eq("chat_id", chatId).order("created_at", { ascending: true });
-    if (data) setMessages(data.map((msg) => ({ ...msg, status: "delivered" as const })));  };
+    if (data) setMessages(data.map((msg) => ({ ...msg, status: "delivered" as const })));
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
+    if (file) {      setSelectedFile(file);
       setSelectedImage(URL.createObjectURL(file));
       setShowAttachmentMenu(false);
     }
@@ -121,15 +116,17 @@ export function GChatApp() {
       if (selectedFile) {
         const compressedFile = await imageCompression(selectedFile, { maxSizeMB: 1, maxWidthOrHeight: 1920 });
         const fileName = `${user.id}/${Date.now()}.${compressedFile.name.split(".").pop()}`;
-        const { data: uploadData } = await supabase.storage.from("messages").upload(fileName, compressedFile);
+        const { data: uploadData, error: uploadError } = await supabase.storage.from("messages").upload(fileName, compressedFile);
+        if (uploadError) throw uploadError;
         if (uploadData) {
           const { data: urlData } = supabase.storage.from("messages").getPublicUrl(uploadData.path);
           finalMediaUrl = urlData.publicUrl;
         }
       }
 
-      const { data } = await supabase.from("messages").insert({ chat_id: activeChatId, user_id: user.id, text: optimisticMsg.text, media_url: finalMediaUrl }).select().single();
-      if (data) setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...msg, id: data.id, status: "sent", media_url: finalMediaUrl } : msg)));
+      const { data, error } = await supabase.from("messages").insert({ chat_id: activeChatId, user_id: user.id, text: optimisticMsg.text, media_url: finalMediaUrl }).select().single();
+      if (error) throw error;
+      setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...msg, id: data.id, status: "sent", media_url: finalMediaUrl } : msg)));
     } catch (error) {
       alert("Failed to send.");
     } finally {
@@ -141,18 +138,14 @@ export function GChatApp() {
 
   const createChat = async () => {
     if (!user || !newChatUsername.trim()) return;
-    const { data: targetProfile, error: profileError } = await supabase.from("profiles").select("id, username, display_name").eq("username", newChatUsername.trim()).single();
-    if (profileError || !targetProfile) { alert("User not found."); return; }
-    if (targetProfile.id === user.id) { alert("Cannot chat with yourself."); return; }
-
-    const { data: chat, error: chatError } = await supabase.from("chats").insert({ name: `Chat with ${targetProfile.display_name}`, created_by: user.id }).select().single();    if (chatError || !chat) { alert("Failed to create chat."); return; }
-
+    const { data: targetProfile } = await supabase.from("profiles").select("id, username, display_name").eq("username", newChatUsername.trim()).single();
+    if (!targetProfile) { alert("User not found."); return; }
+    const { data: chat } = await supabase.from("chats").insert({ name: `Chat with ${targetProfile.display_name}`, created_by: user.id }).select().single();
+    if (!chat) { alert("Failed to create chat."); return; }
     await supabase.from("chat_members").insert([
       { chat_id: chat.id, user_id: user.id, role: "owner" },
       { chat_id: chat.id, user_id: targetProfile.id, role: "member" }
-    ]);
-
-    setShowNewChatModal(false);
+    ]);    setShowNewChatModal(false);
     setNewChatUsername("");
     fetchChats();
     setActiveChatId(chat.id);
@@ -165,7 +158,7 @@ export function GChatApp() {
   const showChatList = tab === "chats" && !activeChat;
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-[#0b141a] text-white relative">
+    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-[#0b141a] text-white relative overflow-hidden">
       {/* Header */}
       <header className="sticky top-0 z-20 bg-[#1f2c34] px-4 py-3 flex items-center gap-3 shadow-md">
         {tab === "chats" && activeChat ? (
@@ -187,18 +180,24 @@ export function GChatApp() {
         )}
       </header>
 
-      {/* Main Content with Custom Background */}
-      <main 
-        className="flex-1 overflow-y-auto"
-        style={{ 
-          backgroundImage: "url('/bg.png')", 
-          backgroundColor: '#0b141a',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'        }}
-      >
+      {/* Main Content with Faint Background Image */}
+      <main className="flex-1 overflow-y-auto relative">
+        {/* Faint Background Layer */}
+        <div 
+          className="absolute inset-0 z-0"
+          style={{ 
+            backgroundImage: "url('/bg.png')", 
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            opacity: 0.15, // Makes it faint
+          }}
+        />
+        {/* Dark overlay to ensure readability */}
+        <div className="absolute inset-0 z-0 bg-[#0b141a]/70" />
         {/* Chat List View */}
         {showChatList && (
-          <div className="p-2">
+          <div className="relative z-10 p-2">
             {chats.length === 0 ? (
               <div className="text-center text-gray-400 mt-20 p-4">
                 <p className="text-lg font-medium">No chats yet</p>
@@ -231,7 +230,7 @@ export function GChatApp() {
 
         {/* Active Chat View */}
         {tab === "chats" && activeChat && (
-          <section className="flex min-h-full flex-col justify-end gap-2 p-4 pb-32">
+          <section className="relative z-10 flex min-h-full flex-col justify-end gap-2 p-4 pb-32">
             {messages.map((msg) => {
               const isOwn = msg.user_id === user.id;
               return (
@@ -243,16 +242,15 @@ export function GChatApp() {
                       {format(new Date(msg.created_at), "HH:mm")}
                       {isOwn && <span className="text-blue-400">✓✓</span>}
                     </div>
-                  </div>                </div>
-              );
+                  </div>
+                </div>              );
             })}
             <div ref={messagesEndRef} />
           </section>
         )}
 
-        {/* Other Tabs */}
         {!showChatList && !activeChat && (
-          <div className="p-4 text-center text-gray-400 mt-10 capitalize">{tab} coming soon</div>
+          <div className="relative z-10 p-4 text-center text-gray-400 mt-10 capitalize">{tab} coming soon</div>
         )}
       </main>
 
@@ -265,7 +263,7 @@ export function GChatApp() {
         </div>
       )}
 
-      {/* WhatsApp Style Composer */}
+      {/* Composer */}
       {tab === "chats" && activeChat && (
         <footer className="fixed bottom-16 left-0 right-0 z-20 bg-[#1f2c34] p-2 flex items-end gap-2 max-w-md mx-auto">
           {showAttachmentMenu && (
@@ -279,20 +277,13 @@ export function GChatApp() {
                   <div className="w-12 h-12 rounded-full bg-pink-500 flex items-center justify-center text-white"><Camera className="h-6 w-6" /></div>
                   <span className="text-xs text-gray-400">Camera</span>
                 </button>
-                <button className="flex flex-col items-center gap-2">
-                  <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center text-white"><MapPin className="h-6 w-6" /></div>
-                  <span className="text-xs text-gray-400">Location</span>
-                </button>
-                <button className="flex flex-col items-center gap-2">
-                  <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-white"><User className="h-6 w-6" /></div>
-                  <span className="text-xs text-gray-400">Contact</span>
-                </button>
               </div>
             </div>
           )}
 
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
+
           <div className="flex w-full items-center gap-2 bg-[#2a3942] rounded-3xl p-2">
             <button className="text-gray-400 p-2"><Smile className="h-6 w-6" /></button>
             <input
@@ -301,18 +292,21 @@ export function GChatApp() {
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}
               placeholder="Message"
               className="flex-1 bg-transparent text-white placeholder-gray-400 outline-none text-[15px]"
-            />
-            <button onClick={() => setShowAttachmentMenu(!showAttachmentMenu)} className="text-gray-400 p-2 rotate-45"><Paperclip className="h-6 w-6" /></button>
+            />            <button onClick={() => setShowAttachmentMenu(!showAttachmentMenu)} className="text-gray-400 p-2 rotate-45"><Paperclip className="h-6 w-6" /></button>
             <button onClick={() => cameraInputRef.current?.click()} className="text-gray-400 p-2"><Camera className="h-6 w-6" /></button>
           </div>
 
-          <button onClick={sendMessage} className="bg-[#00a884] text-white rounded-full p-3 h-12 w-12 flex items-center justify-center shadow-lg shrink-0">
+          <button 
+            onClick={sendMessage} 
+            disabled={isUploading}
+            className="bg-[#00a884] text-white rounded-full p-3 h-12 w-12 flex items-center justify-center shadow-lg shrink-0"
+          >
             {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : (draft.trim() ? <Send className="h-5 w-5" /> : <Mic className="h-5 w-5" />)}
           </button>
         </footer>
       )}
 
-      {/* Floating Action Button for New Chat */}
+      {/* Floating Action Button */}
       {showChatList && (
         <button
           onClick={() => setShowNewChatModal(true)}
@@ -327,7 +321,6 @@ export function GChatApp() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-xl bg-[#1f2c34] p-6 border border-gray-700">
             <h3 className="font-heading text-lg font-semibold text-white mb-2">New Chat</h3>
-            <p className="text-sm text-gray-400 mb-4">Enter the exact username.</p>
             <input
               type="text"
               value={newChatUsername}
@@ -341,14 +334,14 @@ export function GChatApp() {
               <button onClick={createChat} className="flex-1 py-3 rounded-lg bg-[#00a884] text-white font-medium">Create</button>
             </div>
           </div>
-        </div>      )}
+        </div>
+      )}
 
       {/* Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-[#1f2c34] border-t border-gray-800 pb-safe">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-[#1f2c34] border-t border-gray-800">
         <div className="mx-auto flex h-16 max-w-md justify-around items-center">
           <button onClick={() => { setTab("chats"); setActiveChatId(null); }} className={`flex flex-col items-center gap-1 ${tab === "chats" ? "text-[#00a884]" : "text-gray-400"}`}><MessageCircle className="h-6 w-6" /><span className="text-[10px]">Chats</span></button>
-          <button onClick={() => setTab("feed")} className={`flex flex-col items-center gap-1 ${tab === "feed" ? "text-[#00a884]" : "text-gray-400"}`}><Newspaper className="h-6 w-6" /><span className="text-[10px]">Feed</span></button>
-          <button onClick={() => setTab("calls")} className={`flex flex-col items-center gap-1 ${tab === "calls" ? "text-[#00a884]" : "text-gray-400"}`}><Phone className="h-6 w-6" /><span className="text-[10px]">Calls</span></button>
+          <button onClick={() => setTab("feed")} className={`flex flex-col items-center gap-1 ${tab === "feed" ? "text-[#00a884]" : "text-gray-400"}`}><Newspaper className="h-6 w-6" /><span className="text-[10px]">Feed</span></button>          <button onClick={() => setTab("calls")} className={`flex flex-col items-center gap-1 ${tab === "calls" ? "text-[#00a884]" : "text-gray-400"}`}><Phone className="h-6 w-6" /><span className="text-[10px]">Calls</span></button>
           <button onClick={() => setTab("wallet")} className={`flex flex-col items-center gap-1 ${tab === "wallet" ? "text-[#00a884]" : "text-gray-400"}`}><Wallet className="h-6 w-6" /><span className="text-[10px]">Wallet</span></button>
         </div>
       </nav>
