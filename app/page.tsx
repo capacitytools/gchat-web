@@ -5,7 +5,10 @@ import { redirect } from "next/navigation";
 export default async function HomePage() {
   const supabase = createClient();
   
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session }, error } = await supabase.auth.getSession();
+  
+  console.log("Session check:", session ? "HAS SESSION" : "NO SESSION");
+  console.log("Error:", error);
   
   if (!session) {
     redirect("/auth");
