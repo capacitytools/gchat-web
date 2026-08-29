@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { 
   ArrowLeft, MessageCircle, Users, Wallet, Smartphone, Send, LogOut, 
-  Loader2, Paperclip, Plus, Phone, Video, CreditCard, TrendingUp, ArrowDownLeft, ArrowUpRight
+  Loader2, Paperclip, Plus, Phone, Video, CreditCard, TrendingUp, 
+  ArrowDownLeft, ArrowUpRight, Sparkles, PlayCircle, CheckCircle2
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
@@ -14,6 +15,7 @@ type Message = { id: string; chat_id: string; user_id: string; text: string; med
 type Chat = { id: string; name: string; updated_at: string; };
 type View = "home" | "list" | "conversation" | "wallet";
 type Transaction = { id: string; sender_id: string; receiver_id: string; amount: number; type: string; created_at: string; };
+type AdCampaign = { id: string; title: string; description: string; reward_amount: number; };
 
 export function GChatApp() {
   const router = useRouter();
@@ -33,13 +35,19 @@ export function GChatApp() {
   const [showSendMoney, setShowSendMoney] = useState(false);
   const [sendAmount, setSendAmount] = useState("");
 
+  // Ad & AI States
+  const [availableAds, setAvailableAds] = useState<AdCampaign[]>([]);
+  const [watchingAd, setWatchingAd] = useState<AdCampaign | null>(null);
+  const [adProgress, setAdProgress] = useState(0);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  // --- AUTH & DATA ---
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) router.push("/auth");
-      else setUser(session.user);
+      if (!session) router.push("/auth");      else setUser(session.user);
       setLoading(false);
     };
     checkUser();
@@ -47,7 +55,8 @@ export function GChatApp() {
 
   useEffect(() => { 
     if (user) {
-      if (view !== "home") fetchChats();      if (view === "wallet") fetchWalletData();
+      if (view !== "home") fetchChats();
+      if (view === "wallet") fetchWalletData();
     }
   }, [user, view]);
 
@@ -79,10 +88,14 @@ export function GChatApp() {
     if (!user) return;
     const { data: wallet } = await supabase.from("wallets").select("balance").eq("user_id", user.id).single();
     if (wallet) setWalletBalance(wallet.balance);
+    
     const { data: txs } = await supabase.from("transactions").select("*").or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`).order("created_at", { ascending: false }).limit(20);
     if (txs) setTransactions(txs);
-  };
 
+    // Fetch available ads
+    const { data: ads } = await supabase.from("ad_campaigns").select("*").eq("is_active", true).limit(5);
+    if (ads) setAvailableAds(ads);
+  };
   const sendMessage = async () => {
     if (!draft.trim()) return;
     const { data } = await supabase.from("messages").insert({ chat_id: activeChatId, user_id: user.id, text: draft }).select().single();
@@ -96,15 +109,58 @@ export function GChatApp() {
     const { data: members } = await supabase.from("chat_members").select("user_id").eq("chat_id", activeChatId).neq("user_id", user.id);
     if (!members || members.length === 0) return;
     const receiverId = members[0].user_id;
-    const { error } = await supabase.from("transactions").insert({ sender_id: user.id, receiver_id: receiverId, amount: amount, type: 'transfer' });    if (error) { alert("Failed to send money."); return; }
+    const { error } = await supabase.from("transactions").insert({ sender_id: user.id, receiver_id: receiverId, amount: amount, type: 'transfer' });
+    if (error) { alert("Failed to send money."); return; }
     setWalletBalance(prev => prev - amount);
     setShowSendMoney(false);
     setSendAmount("");
-    alert(`Successfully sent $${(amount/100).toFixed(2)}!`);
     fetchWalletData();
   };
 
-  const openChat = (chat: Chat) => { setActiveChatId(chat.id); setActiveChatName(chat.name); setView("conversation"); };
+  // --- AD REWARD LOGIC ---
+  const startWatchingAd = (ad: AdCampaign) => {
+    setWatchingAd(ad);
+    setAdProgress(0);
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 10;
+      setAdProgress(progress);
+      if (progress >= 100) {
+        clearInterval(interval);
+        claimReward(ad.id);
+      }
+    }, 300); // 3 seconds total
+  };
+
+  const claimReward = async (adId: string) => {
+    try {
+      // Call the secure database function
+      const { error } = await supabase.rpc('claim_ad_reward', { target_campaign_id: adId });
+      if (error) throw error;
+      
+      // Update UI
+      setWalletBalance(prev => prev + (watchingAd?.reward_amount || 0));
+      setTimeout(() => {
+        setWatchingAd(null);
+        alert(`🎉 You earned $${((watchingAd?.reward_amount || 0) / 100).toFixed(2)}!`);
+        fetchWalletData();
+      }, 1000);
+    } catch (err: any) {      alert(err.message || "You already watched this ad!");
+      setWatchingAd(null);
+    }
+  };
+
+  // --- AI SUMMARY LOGIC ---
+  const generateAISummary = () => {
+    setAiSummary("AI is analyzing your chat...");
+    setTimeout(() => {
+      const totalMsgs = messages.length;
+      const lastMsg = messages[messages.length - 1]?.text || "nothing";
+      setAiSummary(`Summary: You exchanged ${totalMsgs} messages in this chat. The last topic discussed was: "${lastMsg.substring(0, 30)}..."`);
+    }, 1500);
+  };
+
+  const openChat = (chat: Chat) => { setActiveChatId(chat.id); setActiveChatName(chat.name); setView("conversation"); setAiSummary(null); };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617]"><Loader2 className="h-8 w-8 animate-spin text-cyan-400" /></div>;
   if (!user) return null;
@@ -121,6 +177,7 @@ export function GChatApp() {
             <h1 className="text-xl font-bold">G-Pay Wallet</h1>
             <div className="w-9" />
           </header>
+          
           <div className="relative p-6 rounded-3xl bg-gradient-to-br from-emerald-600 to-cyan-700 shadow-2xl shadow-emerald-500/20 mb-8">
             <p className="text-emerald-100 text-sm mb-1">Total Balance</p>
             <h2 className="text-4xl font-bold text-white mb-6">${(walletBalance / 100).toFixed(2)}</h2>
@@ -129,9 +186,32 @@ export function GChatApp() {
               <button className="flex-1 py-2.5 rounded-xl bg-white/20 backdrop-blur text-white font-medium text-sm">Withdraw</button>
             </div>
           </div>
+
+          {/* G-REWARDS SECTION */}
+          <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><PlayCircle className="h-5 w-5 text-yellow-400" /> G-Rewards (Earn Money)</h3>
+          <div className="space-y-3 mb-8">
+            {availableAds.length === 0 ? <p className="text-sm text-gray-500">No ads available right now.</p> :
+              availableAds.map((ad) => (
+                <button 
+                  key={ad.id} 
+                  onClick={() => startWatchingAd(ad)}                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 hover:bg-yellow-500/20 transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-full bg-yellow-500/20 text-yellow-400"><PlayCircle className="h-5 w-5" /></div>
+                    <div className="text-left">
+                      <p className="font-bold text-white text-sm">{ad.title}</p>
+                      <p className="text-xs text-gray-400">Watch 3s to earn</p>
+                    </div>
+                  </div>
+                  <span className="font-bold text-yellow-400">+${(ad.reward_amount / 100).toFixed(2)}</span>
+                </button>
+              ))
+            }
+          </div>
+
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><TrendingUp className="h-5 w-5 text-cyan-400" /> Recent Activity</h3>
           <div className="flex-1 overflow-y-auto space-y-3">
-            {transactions.length === 0 ? <p className="text-center text-gray-500 mt-10">No transactions yet.</p> : 
+            {transactions.length === 0 ? <p className="text-center text-gray-500 mt-4">No transactions yet.</p> : 
               transactions.map((tx) => {
                 const isSent = tx.sender_id === user.id;
                 return (
@@ -140,12 +220,13 @@ export function GChatApp() {
                       <div className={`p-2.5 rounded-full ${isSent ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
                         {isSent ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownLeft className="h-5 w-5" />}
                       </div>
-                      <div><p className="font-medium text-white">{isSent ? "Sent" : "Received"}</p><p className="text-xs text-gray-400">{format(new Date(tx.created_at), 'MMM d, HH:mm')}</p></div>
+                      <div><p className="font-medium text-white text-sm">{isSent ? "Sent" : "Received"}</p><p className="text-xs text-gray-400">{format(new Date(tx.created_at), 'MMM d, HH:mm')}</p></div>
                     </div>
                     <span className={`font-bold ${isSent ? 'text-red-400' : 'text-emerald-400'}`}>{isSent ? '-' : '+'}${(tx.amount / 100).toFixed(2)}</span>
                   </div>
                 );
-              })            }
+              })
+            }
           </div>
         </div>
       )}
@@ -162,8 +243,7 @@ export function GChatApp() {
           </div>
           <div className="text-center mb-10 mt-4">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-cyan-200 to-emerald-300 bg-clip-text text-transparent mb-2">One World. One App.</h1>
-            <p className="text-lg font-medium text-purple-400 mb-4">Infinite Possibilities.</p>
-          </div>
+            <p className="text-lg font-medium text-purple-400 mb-4">Infinite Possibilities.</p>          </div>
           <div className="grid grid-cols-2 gap-4 mb-8">
             <button className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Users className="h-8 w-8 text-purple-400 mb-3" /><h3 className="font-bold">G-Tribe</h3><p className="text-xs text-gray-400">Coming Soon</p></button>
             <button onClick={() => setView("wallet")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Wallet className="h-8 w-8 text-blue-400 mb-3" /><h3 className="font-bold">G-Pay</h3><p className="text-xs text-gray-400">Wallet & Earn</p></button>
@@ -194,13 +274,14 @@ export function GChatApp() {
                 <button key={chat.id} onClick={() => openChat(chat)} className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 text-left">
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold">{chat.name.charAt(0).toUpperCase()}</div>
                   <div className="flex-1 border-b border-white/5 pb-3"><h3 className="font-medium text-white">{chat.name}</h3><p className="text-xs text-gray-500">Tap to open</p></div>
-                </button>              ))
+                </button>
+              ))
             }
           </div>
         </div>
       )}
 
-      {/* CONVERSATION VIEW - FIXED */}
+      {/* CONVERSATION VIEW */}
       {view === "conversation" && activeChatId && (
         <div className="relative z-10 flex flex-col min-h-screen">
           <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center gap-3">
@@ -208,10 +289,16 @@ export function GChatApp() {
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold">{activeChatName.charAt(0).toUpperCase()}</div>
             <div className="flex-1"><h1 className="font-semibold text-white text-sm">{activeChatName}</h1><p className="text-xs text-emerald-400">Online</p></div>
             <div className="flex gap-1">
+              <button onClick={generateAISummary} className="p-2 rounded-full hover:bg-white/5 text-purple-400"><Sparkles className="h-5 w-5" /></button>
               <button className="p-2 rounded-full hover:bg-white/5 text-gray-400"><Phone className="h-5 w-5" /></button>
-              <button className="p-2 rounded-full hover:bg-white/5 text-gray-400"><Video className="h-5 w-5" /></button>
             </div>
           </header>
+          {aiSummary && (
+            <div className="mx-4 mt-4 p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-sm text-purple-200 flex items-start gap-2">
+              <Sparkles className="h-4 w-4 mt-0.5 shrink-0" />
+              <p>{aiSummary}</p>
+            </div>
+          )}
 
           <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
             {messages.map((msg) => {
@@ -228,26 +315,14 @@ export function GChatApp() {
             <div ref={messagesEndRef} />
           </main>
 
-          {/* Message Composer - Now Visible */}
           <div className="fixed bottom-16 left-0 right-0 z-30 bg-[#020617]/95 backdrop-blur-xl border-t border-white/10 p-3 max-w-md mx-auto">
             <div className="flex items-center gap-2">
-              <button onClick={() => setShowSendMoney(true)} className="p-3 rounded-full bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 shrink-0">
-                <CreditCard className="h-5 w-5" />
-              </button>
-              <button className="p-3 rounded-full bg-white/5 text-gray-400 shrink-0">
-                <Paperclip className="h-5 w-5" />
-              </button>
+              <button onClick={() => setShowSendMoney(true)} className="p-3 rounded-full bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 shrink-0"><CreditCard className="h-5 w-5" /></button>
+              <button className="p-3 rounded-full bg-white/5 text-gray-400 shrink-0"><Paperclip className="h-5 w-5" /></button>
               <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl px-4 py-3">
-                <input 
-                  value={draft} 
-                  onChange={(e) => setDraft(e.target.value)} 
-                  onKeyDown={(e) => e.key === "Enter" && sendMessage()} 
-                  placeholder="Type a message..." 
-                  className="w-full bg-transparent text-white outline-none text-[15px]"                 />
+                <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Type a message..." className="w-full bg-transparent text-white outline-none text-[15px]" />
               </div>
-              <button onClick={sendMessage} className="p-3 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white shadow-lg shrink-0">
-                <Send className="h-5 w-5" />
-              </button>
+              <button onClick={sendMessage} className="p-3 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white shadow-lg shrink-0"><Send className="h-5 w-5" /></button>
             </div>
           </div>
         </div>
@@ -264,6 +339,29 @@ export function GChatApp() {
               <button onClick={() => setShowSendMoney(false)} className="flex-1 py-3 rounded-xl bg-white/5">Cancel</button>
               <button onClick={handleSendMoney} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold">Send</button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* AD PLAYER MODAL */}
+      {watchingAd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-md">
+          <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-8 text-center">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center mx-auto mb-6 animate-pulse">
+              <PlayCircle className="h-10 w-10 text-white" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">{watchingAd.title}</h3>
+            <p className="text-sm text-gray-400 mb-6">{watchingAd.description}</p>
+            
+            <div className="w-full bg-white/10 rounded-full h-2 mb-2">
+              <div className="bg-gradient-to-r from-yellow-400 to-orange-500 h-2 rounded-full transition-all duration-300" style={{ width: `${adProgress}%` }} />
+            </div>
+            <p className="text-xs text-gray-500">Watching ad... {Math.floor(adProgress / 10)}s / 3s</p>
+            
+            {adProgress === 100 && (
+              <div className="mt-4 flex items-center justify-center gap-2 text-emerald-400 font-bold animate-bounce">
+                <CheckCircle2 className="h-5 w-5" /> Reward Claimed!
+              </div>
+            )}
           </div>
         </div>
       )}
