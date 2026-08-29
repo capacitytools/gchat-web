@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { useRouter } from "next/navigation";
 import { GButton } from "@/components/gbutton";
 
 export default function AuthPage() {
@@ -11,7 +10,6 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
-  const router = useRouter();
   const supabase = createClient();
 
   const handleAuth = async () => {
@@ -25,7 +23,8 @@ export default function AuthPage() {
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        router.push("/");
+        // Force hard refresh to load the session
+        window.location.href = "/"; 
       }
     } catch (err: any) {
       setError(err.message);
