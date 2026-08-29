@@ -182,7 +182,7 @@ export function GChatApp() {
 
       {/* Main Content with Faint Background Image */}
       <main className="flex-1 overflow-y-auto relative">
-        {/* Faint Background Layer */}
+        {/* Faint Background Layer (Increased opacity so it shows) */}
         <div 
           className="absolute inset-0 z-0"
           style={{ 
@@ -190,11 +190,11 @@ export function GChatApp() {
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
-            opacity: 0.15, // Makes it faint
+            opacity: 0.4, 
           }}
         />
-        {/* Dark overlay to ensure readability */}
-        <div className="absolute inset-0 z-0 bg-[#0b141a]/70" />
+        {/* Lighter dark overlay so text is still readable */}
+        <div className="absolute inset-0 z-0 bg-[#0b141a]/40" />
         {/* Chat List View */}
         {showChatList && (
           <div className="relative z-10 p-2">
@@ -265,7 +265,7 @@ export function GChatApp() {
 
       {/* Composer */}
       {tab === "chats" && activeChat && (
-        <footer className="fixed bottom-16 left-0 right-0 z-20 bg-[#1f2c34] p-2 flex items-end gap-2 max-w-md mx-auto">
+        <footer className="fixed bottom-16 left-0 right-0 z-20 bg-[#1f2c34] p-2 flex items-center gap-2 max-w-md mx-auto">
           {showAttachmentMenu && (
             <div className="absolute bottom-full left-0 right-0 bg-[#1f2c34] border-t border-gray-700 p-6 rounded-t-2xl">
               <div className="grid grid-cols-4 gap-4">
@@ -284,24 +284,26 @@ export function GChatApp() {
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
 
-          <div className="flex w-full items-center gap-2 bg-[#2a3942] rounded-3xl p-2">
+          {/* FIX: Changed w-full to flex-1 so it doesn't push the send button off screen */}
+          <div className="flex flex-1 items-center gap-2 bg-[#2a3942] rounded-3xl p-2">
             <button className="text-gray-400 p-2"><Smile className="h-6 w-6" /></button>
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}
               placeholder="Message"
-              className="flex-1 bg-transparent text-white placeholder-gray-400 outline-none text-[15px]"
-            />            <button onClick={() => setShowAttachmentMenu(!showAttachmentMenu)} className="text-gray-400 p-2 rotate-45"><Paperclip className="h-6 w-6" /></button>
+              className="flex-1 bg-transparent text-white placeholder-gray-400 outline-none text-[15px]"            />
+            <button onClick={() => setShowAttachmentMenu(!showAttachmentMenu)} className="text-gray-400 p-2 rotate-45"><Paperclip className="h-6 w-6" /></button>
             <button onClick={() => cameraInputRef.current?.click()} className="text-gray-400 p-2"><Camera className="h-6 w-6" /></button>
           </div>
 
+          {/* FIX: Send Button is now visible */}
           <button 
             onClick={sendMessage} 
             disabled={isUploading}
             className="bg-[#00a884] text-white rounded-full p-3 h-12 w-12 flex items-center justify-center shadow-lg shrink-0"
           >
-            {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : (draft.trim() ? <Send className="h-5 w-5" /> : <Mic className="h-5 w-5" />)}
+            {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
           </button>
         </footer>
       )}
@@ -339,9 +341,9 @@ export function GChatApp() {
 
       {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-[#1f2c34] border-t border-gray-800">
-        <div className="mx-auto flex h-16 max-w-md justify-around items-center">
-          <button onClick={() => { setTab("chats"); setActiveChatId(null); }} className={`flex flex-col items-center gap-1 ${tab === "chats" ? "text-[#00a884]" : "text-gray-400"}`}><MessageCircle className="h-6 w-6" /><span className="text-[10px]">Chats</span></button>
-          <button onClick={() => setTab("feed")} className={`flex flex-col items-center gap-1 ${tab === "feed" ? "text-[#00a884]" : "text-gray-400"}`}><Newspaper className="h-6 w-6" /><span className="text-[10px]">Feed</span></button>          <button onClick={() => setTab("calls")} className={`flex flex-col items-center gap-1 ${tab === "calls" ? "text-[#00a884]" : "text-gray-400"}`}><Phone className="h-6 w-6" /><span className="text-[10px]">Calls</span></button>
+        <div className="mx-auto flex h-16 max-w-md justify-around items-center">          <button onClick={() => { setTab("chats"); setActiveChatId(null); }} className={`flex flex-col items-center gap-1 ${tab === "chats" ? "text-[#00a884]" : "text-gray-400"}`}><MessageCircle className="h-6 w-6" /><span className="text-[10px]">Chats</span></button>
+          <button onClick={() => setTab("feed")} className={`flex flex-col items-center gap-1 ${tab === "feed" ? "text-[#00a884]" : "text-gray-400"}`}><Newspaper className="h-6 w-6" /><span className="text-[10px]">Feed</span></button>
+          <button onClick={() => setTab("calls")} className={`flex flex-col items-center gap-1 ${tab === "calls" ? "text-[#00a884]" : "text-gray-400"}`}><Phone className="h-6 w-6" /><span className="text-[10px]">Calls</span></button>
           <button onClick={() => setTab("wallet")} className={`flex flex-col items-center gap-1 ${tab === "wallet" ? "text-[#00a884]" : "text-gray-400"}`}><Wallet className="h-6 w-6" /><span className="text-[10px]">Wallet</span></button>
         </div>
       </nav>
