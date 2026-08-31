@@ -10,6 +10,7 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
+import imageCompression from "browser-image-compression";
 import { GChatBackground } from "./GChatBackground";
 
 type Message = { id: string; chat_id: string; user_id: string; text: string; media_url: string | null; created_at: string; status: string; };
@@ -46,8 +47,8 @@ export function GChatApp() {
   const [showSendMoney, setShowSendMoney] = useState(false);
   const [sendAmount, setSendAmount] = useState("");
 
-  const [availableAds, setAvailableAds] = useState<AdCampaign[]>([]);
-  const [watchingAd, setWatchingAd] = useState<AdCampaign | null>(null);  const [adProgress, setAdProgress] = useState(0);
+  const [availableAds, setAvailableAds] = useState<AdCampaign[]>([]);  const [watchingAd, setWatchingAd] = useState<AdCampaign | null>(null);
+  const [adProgress, setAdProgress] = useState(0);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
 
   // Feed States
@@ -95,8 +96,8 @@ export function GChatApp() {
   const fetchChats = async () => {
     if (!user) return;
     const { data } = await supabase.from("chat_members").select("chat_id, chats(id, name, created_at)").eq("user_id", user.id);
-    if (data) setChats(data.map((item: any) => ({ id: item.chats.id, name: item.chats.name, updated_at: item.chats.created_at })));
-  };
+    if (data) setChats(data.map((item: any) => ({ id: item.chats.id, name: item.chats.name, updated_at: item.chats.created_at })));  };
+
   const fetchMessages = async (chatId: string) => {
     const { data } = await supabase.from("messages").select("*").eq("chat_id", chatId).order("created_at", { ascending: true });
     if (data) setMessages(data);
@@ -115,37 +116,46 @@ export function GChatApp() {
   const fetchFeedData = async () => {
     if (!user) return;
     
-    // 1. Fetch Posts simply
-    const { data: postsData, error } = await supabase
-      .from("posts")
-      .select("*, profiles:user_id(username, display_name)")
-      .eq("post_type", "post")
-      .order("created_at", { ascending: false })
-      .limit(20);
+    try {
+      console.log("Fetching feed...");
+      
+      const { data: postsData, error } = await supabase
+        .from("posts")
+        .select(`
+          *,
+          profiles:user_id (username, display_name)
+        `)
+        .eq("post_type", "post")
+        .order("created_at", { ascending: false })
+        .limit(20);
 
-    if (error) {
-      console.error("Feed fetch error:", error);
-      return;
-    }
+      if (error) {
+        console.error("Feed fetch error:", error);
+        return;
+      }
 
-    // 2. Check likes for each post
-    if (postsData) {
-      const postsWithLikes = await Promise.all(postsData.map(async (post: any) => {
-        const { data: likeData } = await supabase
-          .from("post_likes")
-          .select("id")
-          .eq("user_id", user.id)
-          .eq("post_id", post.id)
-          .single();
-        return { ...post, is_liked: !!likeData };
-      }));
-      setPosts(postsWithLikes);
+      console.log("Fetched posts:", postsData?.length || 0);
+
+      if (postsData) {
+        const postsWithLikes = await Promise.all(postsData.map(async (post: any) => {
+          const { data: likeData } = await supabase
+            .from("post_likes")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("post_id", post.id)
+            .single();
+          return { ...post, is_liked: !!likeData };
+        }));        setPosts(postsWithLikes);
+      }
+    } catch (err) {
+      console.error("Error in fetchFeedData:", err);
     }
   };
 
   const sendMessage = async () => {
     if (!draft.trim()) return;
-    const { data } = await supabase.from("messages").insert({ chat_id: activeChatId, user_id: user.id, text: draft }).select().single();    if (data) setMessages((prev) => [...prev, data]);
+    const { data } = await supabase.from("messages").insert({ chat_id: activeChatId, user_id: user.id, text: draft }).select().single();
+    if (data) setMessages((prev) => [...prev, data]);
     setDraft("");
   };
 
@@ -184,8 +194,7 @@ export function GChatApp() {
       setWalletBalance(prev => prev + (watchingAd?.reward_amount || 0));
       setTimeout(() => {
         setWatchingAd(null);
-        alert(` You earned $${((watchingAd?.reward_amount || 0) / 100).toFixed(2)}!`);
-        fetchWalletData();
+        alert(` You earned $${((watchingAd?.reward_amount || 0) / 100).toFixed(2)}!`);        fetchWalletData();
       }, 1000);
     } catch (err: any) {
       alert(err.message || "You already watched this ad!");
@@ -194,14 +203,14 @@ export function GChatApp() {
   };
 
   const generateAISummary = () => {
-    setAiSummary("AI is analyzing your chat...");    setTimeout(() => {
+    setAiSummary("AI is analyzing your chat...");
+    setTimeout(() => {
       const totalMsgs = messages.length;
       const lastMsg = messages[messages.length - 1]?.text || "nothing";
       setAiSummary(`Summary: You exchanged ${totalMsgs} messages. Last topic: "${lastMsg.substring(0, 30)}..."`);
     }, 1500);
   };
 
-  // --- FIXED POST CREATION ---
   const handleCreatePost = async () => {
     if (!postContent.trim() && !postImage) {
       alert("Please add some text or a photo.");
@@ -212,47 +221,77 @@ export function GChatApp() {
     let mediaUrl = null;
 
     try {
-      // 1. Upload Image if exists
+      // 1. Upload Image if exists (with compression)
       if (postImage) {
-        const fileExt = postImage.name.split('.').pop() || 'jpg';
+        const options = {
+          maxSizeMB: 2,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true,
+        };
+        
+        const compressedFile = await imageCompression(postImage, options);
+        const fileExt = compressedFile.name.split('.').pop() || 'jpg';
         const fileName = `${user.id}/posts/${Date.now()}.${fileExt}`;
+        
+        console.log("Uploading image:", fileName);
         
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from("messages")
-          .upload(fileName, postImage);
-          
-        if (uploadError) throw uploadError;
+          .upload(fileName, compressedFile, {
+            cacheControl: '3600',
+            upsert: false
+          });
+        
+        if (uploadError) {
+          console.error("Upload error:", uploadError);          throw new Error(`Upload failed: ${uploadError.message}`);
+        }
         
         if (uploadData) {
-          const { data: urlData } = supabase.storage.from("messages").getPublicUrl(uploadData.path);
+          const { data: urlData } = supabase.storage
+            .from("messages")
+            .getPublicUrl(uploadData.path);
           mediaUrl = urlData.publicUrl;
+          console.log("Image uploaded successfully:", mediaUrl);
         }
       }
 
       // 2. Insert Post into Database
-      const { error: dbError } = await supabase.from("posts").insert({
-        user_id: user.id,
-        content: postContent.trim(),
-        media_url: mediaUrl,
-        post_type: "post"
-      });
-
-      if (dbError) throw dbError;
+      console.log("Creating post with content:", postContent, "media:", mediaUrl);
       
-      // 3. Success
+      const { data: postData, error: dbError } = await supabase
+        .from("posts")
+        .insert({
+          user_id: user.id,
+          content: postContent.trim(),
+          media_url: mediaUrl,
+          post_type: "post"
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error("Database error:", dbError);
+        throw new Error(`Database error: ${dbError.message}`);
+      }
+
+      console.log("Post created successfully:", postData);
+      
+      // 3. Success - Clear and refresh
       setShowCreatePost(false);
       setPostContent("");
       setPostImage(null);
-      setPostImagePreview(null);      fetchFeedData(); // Refresh feed
+      setPostImagePreview(null);
+      
+      // Force refresh the feed
+      await fetchFeedData();
       
     } catch (err: any) {
       console.error("Post creation failed:", err);
-      alert("Failed to create post: " + (err.message || "Unknown error"));
+      alert(`Failed to create post: ${err.message}. Check console for details.`);
     } finally {
       setIsPosting(false);
     }
   };
-
   const handleLikePost = async (postId: string) => {
     const post = posts.find(p => p.id === postId);
     if (!post) return;
@@ -292,7 +331,8 @@ export function GChatApp() {
             ) : (
               posts.map((post) => (
                 <div key={post.id} className="bg-white/5 border border-white/5 rounded-2xl overflow-hidden">
-                  <div className="flex items-center justify-between p-3">                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between p-3">
+                    <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold">
                         {post.profiles?.display_name?.charAt(0) || "U"}
                       </div>
@@ -302,7 +342,6 @@ export function GChatApp() {
                       </div>
                     </div>
                   </div>
-
                   {post.content && <p className="px-3 pb-2 text-sm text-gray-200">{post.content}</p>}
                   {post.media_url && <img src={post.media_url} alt="Post" className="w-full max-h-96 object-cover" />}
 
@@ -341,7 +380,8 @@ export function GChatApp() {
               <button className="flex-1 py-2.5 rounded-xl bg-white/20 backdrop-blur text-white font-medium text-sm">Add Money</button>
               <button className="flex-1 py-2.5 rounded-xl bg-white/20 backdrop-blur text-white font-medium text-sm">Withdraw</button>
             </div>
-          </div>          <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><PlayCircle className="h-5 w-5 text-yellow-400" /> G-Rewards</h3>
+          </div>
+          <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><PlayCircle className="h-5 w-5 text-yellow-400" /> G-Rewards</h3>
           <div className="space-y-3 mb-8">
             {availableAds.length === 0 ? <p className="text-sm text-gray-500">No ads available.</p> :
               availableAds.map((ad) => (
@@ -350,8 +390,7 @@ export function GChatApp() {
                     <div className="p-2 rounded-full bg-yellow-500/20 text-yellow-400"><PlayCircle className="h-5 w-5" /></div>
                     <div className="text-left"><p className="font-bold text-white text-sm">{ad.title}</p><p className="text-xs text-gray-400">Watch 3s to earn</p></div>
                   </div>
-                  <span className="font-bold text-yellow-400">+${(ad.reward_amount / 100).toFixed(2)}</span>
-                </button>
+                  <span className="font-bold text-yellow-400">+${(ad.reward_amount / 100).toFixed(2)}</span>                </button>
               ))
             }
           </div>
@@ -390,7 +429,8 @@ export function GChatApp() {
             <p className="text-lg font-medium text-purple-400 mb-4">Infinite Possibilities.</p>
           </div>
           <div className="grid grid-cols-2 gap-4 mb-8">
-            <button className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Users className="h-8 w-8 text-purple-400 mb-3" /><h3 className="font-bold">G-Tribe</h3><p className="text-xs text-gray-400">Coming Soon</p></button>            <button onClick={() => setView("wallet")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Wallet className="h-8 w-8 text-blue-400 mb-3" /><h3 className="font-bold">G-Pay</h3><p className="text-xs text-gray-400">Wallet & Earn</p></button>
+            <button className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Users className="h-8 w-8 text-purple-400 mb-3" /><h3 className="font-bold">G-Tribe</h3><p className="text-xs text-gray-400">Coming Soon</p></button>
+            <button onClick={() => setView("wallet")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Wallet className="h-8 w-8 text-blue-400 mb-3" /><h3 className="font-bold">G-Pay</h3><p className="text-xs text-gray-400">Wallet & Earn</p></button>
             <button className="col-span-2 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl flex items-center gap-4"><Smartphone className="h-6 w-6 text-emerald-400" /><div className="text-left"><h3 className="font-bold">G-Chat one</h3><p className="text-xs text-gray-400">Coming Soon</p></div></button>
           </div>
           <div className="flex-1" />
@@ -399,8 +439,7 @@ export function GChatApp() {
             <div className="flex-1 text-left"><p className="text-white font-medium">Message the world...</p><p className="text-xs text-gray-400">Select a conversation</p></div>
             <Send className="h-5 w-5 text-cyan-400" />
           </button>
-        </div>
-      )}
+        </div>      )}
 
       {/* CHAT LIST VIEW */}
       {view === "list" && (
@@ -439,7 +478,8 @@ export function GChatApp() {
             {messages.map((msg) => {
               const isOwn = msg.user_id === user.id;
               return (
-                <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>                  <div className={`max-w-[80%] rounded-2xl px-4 py-3 shadow-lg ${isOwn ? "bg-gradient-to-br from-emerald-600 to-cyan-700 text-white rounded-br-sm" : "bg-white/10 backdrop-blur-md border border-white/10 text-white rounded-bl-sm"}`}>
+                <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[80%] rounded-2xl px-4 py-3 shadow-lg ${isOwn ? "bg-gradient-to-br from-emerald-600 to-cyan-700 text-white rounded-br-sm" : "bg-white/10 backdrop-blur-md border border-white/10 text-white rounded-bl-sm"}`}>
                     {msg.text && <p className="text-[15px] whitespace-pre-wrap">{msg.text}</p>}
                     <div className={`text-[10px] mt-1 flex justify-end ${isOwn ? "text-emerald-100" : "text-gray-400"}`}>{format(new Date(msg.created_at), "HH:mm")}</div>
                   </div>
@@ -448,8 +488,7 @@ export function GChatApp() {
             })}
             <div ref={messagesEndRef} />
           </main>
-          <div className="fixed bottom-16 left-0 right-0 z-30 bg-[#020617]/95 backdrop-blur-xl border-t border-white/10 p-3 max-w-md mx-auto">
-            <div className="flex items-center gap-2">
+          <div className="fixed bottom-16 left-0 right-0 z-30 bg-[#020617]/95 backdrop-blur-xl border-t border-white/10 p-3 max-w-md mx-auto">            <div className="flex items-center gap-2">
               <button onClick={() => setShowSendMoney(true)} className="p-3 rounded-full bg-blue-500/10 text-blue-400 shrink-0"><CreditCard className="h-5 w-5" /></button>
               <button className="p-3 rounded-full bg-white/5 text-gray-400 shrink-0"><Paperclip className="h-5 w-5" /></button>
               <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl px-4 py-3">
@@ -488,7 +527,8 @@ export function GChatApp() {
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">Send Money</h3>
             <p className="text-sm text-gray-400 mb-4">Balance: ${(walletBalance / 100).toFixed(2)}</p>
-            <input type="number" value={sendAmount} onChange={(e) => setSendAmount(e.target.value)} placeholder="Amount (USD)" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-4 outline-none" />            <div className="flex gap-2">
+            <input type="number" value={sendAmount} onChange={(e) => setSendAmount(e.target.value)} placeholder="Amount (USD)" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-4 outline-none" />
+            <div className="flex gap-2">
               <button onClick={() => setShowSendMoney(false)} className="flex-1 py-3 rounded-xl bg-white/5">Cancel</button>
               <button onClick={handleSendMoney} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold">Send</button>
             </div>
@@ -497,8 +537,7 @@ export function GChatApp() {
       )}
 
       {/* AD PLAYER MODAL */}
-      {watchingAd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-md">
+      {watchingAd && (        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-md">
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-8 text-center">
             <div className="w-20 h-20 rounded-full bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center mx-auto mb-6 animate-pulse"><PlayCircle className="h-10 w-10 text-white" /></div>
             <h3 className="text-xl font-bold mb-2">{watchingAd.title}</h3>
