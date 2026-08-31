@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { 
-  ArrowLeft, MessageCircle, Users, Wallet, Smartphone, Send, LogOut, 
+  ArrowLeft, MessageCircle, Users, Wallet, Send, LogOut, 
   Loader2, Paperclip, Plus, Phone, Video, CreditCard, TrendingUp, 
   ArrowDownLeft, ArrowUpRight, Sparkles, PlayCircle, CheckCircle2,
   Heart, MessageSquare, Image as ImageIcon, X, MoreHorizontal,
-  Users2, Building2, Settings, BarChart3, MessageCircleReply, Banknote
+  Users2, Building2, Settings, BarChart3, MessageCircleReply, Banknote,
+  User, Mail, MapPin, PhoneCall, Edit3, Eye, Calendar, Clock,
+  Shield, Bell, Palette, Bot, Trash2, Save, Camera, Award,
+  Zap, Lock, Globe, Link2, Instagram, Twitter
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
@@ -17,12 +20,13 @@ import { GChatBackground } from "./GChatBackground";
 // Types
 type Message = { id: string; chat_id: string; user_id: string; text: string; media_url: string | null; created_at: string; status: string; };
 type Chat = { id: string; name: string; updated_at: string; };
-type View = "home" | "list" | "conversation" | "wallet" | "feed" | "gtribe" | "gchatone" | "call";
+type View = "home" | "list" | "conversation" | "wallet" | "feed" | "gtribe" | "gchatone" | "profile" | "edit-profile" | "analytics" | "settings";
 type Transaction = { id: string; sender_id: string; receiver_id: string; amount: number; type: string; created_at: string; };
 type AdCampaign = { id: string; title: string; description: string; reward_amount: number; };
-type Post = { id: string; user_id: string; content: string; media_url: string | null; post_type: string; created_at: string; profiles: { username: string; display_name: string } | null; is_liked: boolean; };
+type Post = { id: string; user_id: string; content: string; media_url: string | null; post_type: string; created_at: string; profiles: { username: string; display_name: string } | null; is_liked: boolean; likes_count: number; };
 type Group = { id: string; name: string; description: string; owner_id: string; group_type: string; member_count: number; created_at: string; };
 type BusinessProfile = { id: string; user_id: string; business_name: string; category: string; description: string; is_verified: boolean; auto_reply_enabled: boolean; auto_reply_message: string | null; };
+type UserProfile = { id: string; user_id: string; username: string; display_name: string; bio: string; email: string; phone: string; whatsapp: string; address: string; avatar_url: string | null; instagram: string; twitter: string; website: string; profile_views: number; posts_count: number; messages_sent: number; badges: string[]; created_at: string; };
 
 export function GChatApp() {
   const router = useRouter();
@@ -43,11 +47,11 @@ export function GChatApp() {
   const [sendAmount, setSendAmount] = useState("");
 
   const [availableAds, setAvailableAds] = useState<AdCampaign[]>([]);
-  const [watchingAd, setWatchingAd] = useState<AdCampaign | null>(null);
-  const [adProgress, setAdProgress] = useState(0);
+  const [watchingAd, setWatchingAd] = useState<AdCampaign | null>(null);  const [adProgress, setAdProgress] = useState(0);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
 
-  // Feed States  const [posts, setPosts] = useState<Post[]>([]);
+  // Feed States
+  const [posts, setPosts] = useState<Post[]>([]);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [postContent, setPostContent] = useState("");
   const [postImage, setPostImage] = useState<File | null>(null);
@@ -66,7 +70,6 @@ export function GChatApp() {
   const [businessName, setBusinessName] = useState("");
   const [businessCategory, setBusinessCategory] = useState("");
   const [autoReply, setAutoReply] = useState("");
-  const [aiTone, setAiTone] = useState("professional");
 
   // Payout States
   const [showWithdraw, setShowWithdraw] = useState(false);
@@ -76,14 +79,24 @@ export function GChatApp() {
   const [accountName, setAccountName] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
+  // Profile States
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editForm, setEditForm] = useState({
+    display_name: "", username: "", bio: "", email: "", phone: "", 
+    whatsapp: "", address: "", instagram: "", twitter: "", website: ""
+  });
+  const [profileAvatar, setProfileAvatar] = useState<File | null>(null);
+  const [profileAvatarPreview, setProfileAvatarPreview] = useState<string | null>(null);
+  const [viewingProfile, setViewingProfile] = useState<UserProfile | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // --- AUTH & DATA ---
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) router.push("/auth");
-      else setUser(session.user);
+      if (!session) router.push("/auth");      else setUser(session.user);
       setLoading(false);
     };
     checkUser();
@@ -96,7 +109,9 @@ export function GChatApp() {
       if (view === "feed") fetchFeedData();
       if (view === "gtribe") fetchGroups();
       if (view === "gchatone") fetchBusinessProfile();
-    }  }, [user, view]);
+      if (view === "profile" || view === "edit-profile" || view === "analytics") fetchProfile();
+    }
+  }, [user, view]);
 
   useEffect(() => {
     if (activeChatId) {
@@ -104,23 +119,12 @@ export function GChatApp() {
       const channel = supabase.channel(`chat:${activeChatId}`)
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `chat_id=eq.${activeChatId}` }, (payload) => {
           setMessages((prev) => [...prev, { ...(payload.new as any), status: "delivered" }]);
-          checkAutoReply(payload.new);
         }).subscribe();
       return () => { supabase.removeChannel(channel); };
     }
   }, [activeChatId]);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-
-  const checkAutoReply = async (newMessage: any) => {
-    if (newMessage.user_id === user.id) return;
-    if (!businessProfile || !businessProfile.auto_reply_enabled) return;
-    
-    setTimeout(async () => {
-      const aiResponse = businessProfile.auto_reply_message || `Thanks for reaching out to ${businessProfile.business_name}! We will get back to you shortly.`;
-      await supabase.from("messages").insert({ chat_id: activeChatId, user_id: user.id, text: aiResponse });
-    }, 1500);
-  };
 
   const fetchChats = async () => {
     if (!user) return;
@@ -142,13 +146,13 @@ export function GChatApp() {
     const { data: ads } = await supabase.from("ad_campaigns").select("*").eq("is_active", true).limit(5);
     if (ads) setAvailableAds(ads);
   };
-
   const fetchFeedData = async () => {
     if (!user) return;
-    const { data: postsData } = await supabase.from("posts").select(`*, profiles:user_id(username, display_name)`).eq("post_type", "post").order("created_at", { ascending: false }).limit(20);    if (postsData) {
+    const { data: postsData } = await supabase.from("posts").select(`*, profiles:user_id(username, display_name)`).eq("post_type", "post").order("created_at", { ascending: false }).limit(20);
+    if (postsData) {
       const postsWithLikes = await Promise.all(postsData.map(async (post: any) => {
         const { data: likeData } = await supabase.from("post_likes").select("id").eq("user_id", user.id).eq("post_id", post.id).single();
-        return { ...post, is_liked: !!likeData };
+        return { ...post, is_liked: !!likeData, likes_count: post.likes_count || 0 };
       }));
       setPosts(postsWithLikes);
     }
@@ -166,12 +170,31 @@ export function GChatApp() {
     if (data) setBusinessProfile(data);
   };
 
+  const fetchProfile = async () => {
+    if (!user) return;
+    const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+    if (data) {
+      setProfile(data);
+      setEditForm({
+        display_name: data.display_name || "",
+        username: data.username || "",
+        bio: data.bio || "",
+        email: data.email || "",
+        phone: data.phone || "",
+        whatsapp: data.whatsapp || "",
+        address: data.address || "",
+        instagram: data.instagram || "",
+        twitter: data.twitter || "",
+        website: data.website || ""
+      });
+    }
+  };
+
   const sendMessage = async () => {
     if (!draft.trim()) return;
     const { data } = await supabase.from("messages").insert({ chat_id: activeChatId, user_id: user.id, text: draft }).select().single();
     if (data) setMessages((prev) => [...prev, data]);
-    setDraft("");
-  };
+    setDraft("");  };
 
   const handleSendMoney = async () => {
     const amount = parseInt(sendAmount) * 100;
@@ -188,14 +211,8 @@ export function GChatApp() {
 
   const handleWithdraw = async () => {
     const amount = parseInt(withdrawAmount) * 100;
-    if (!amount || amount <= 0 || amount > walletBalance) {
-      alert("Invalid amount or insufficient balance.");
-      return;
-    }
-    if (!bankName || !accountNumber || !accountName) {
-      alert("Please fill in all bank details.");
-      return;    }
-
+    if (!amount || amount <= 0 || amount > walletBalance) { alert("Invalid amount or insufficient balance."); return; }
+    if (!bankName || !accountNumber || !accountName) { alert("Please fill in all bank details."); return; }
     setIsWithdrawing(true);
     try {
       const res = await fetch('/api/withdraw', {
@@ -205,61 +222,64 @@ export function GChatApp() {
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error);
-      
-      alert("Withdrawal request submitted successfully! Funds will arrive in 1-3 business days.");
+      alert("Withdrawal request submitted successfully!");
       setShowWithdraw(false);
-      setWithdrawAmount("");
-      setBankName("");
-      setAccountNumber("");
-      setAccountName("");
+      setWithdrawAmount(""); setBankName(""); setAccountNumber(""); setAccountName("");
       fetchWalletData();
-    } catch (err: any) {
-      alert("Withdrawal failed: " + err.message);
-    } finally {
-      setIsWithdrawing(false);
-    }
+    } catch (err: any) { alert("Withdrawal failed: " + err.message); }
+    finally { setIsWithdrawing(false); }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    try {
+      let avatarUrl = profile?.avatar_url || null;
+      if (profileAvatar) {
+        const compressedFile = await imageCompression(profileAvatar, { maxSizeMB: 1, maxWidthOrHeight: 800 });
+        const fileName = `${user.id}/avatar/${Date.now()}.${compressedFile.name.split('.').pop()}`;
+        const { data: uploadData } = await supabase.storage.from("messages").upload(fileName, compressedFile);
+        if (uploadData) {
+          const { data: urlData } = supabase.storage.from("messages").getPublicUrl(uploadData.path);
+          avatarUrl = urlData.publicUrl;
+        }
+      }
+      const { error } = await supabase.from("profiles").update({        ...editForm,
+        avatar_url: avatarUrl,
+        updated_at: new Date().toISOString()
+      }).eq("id", user.id);
+      if (error) throw error;
+      setShowEditProfile(false);
+      setProfileAvatar(null);
+      setProfileAvatarPreview(null);
+      fetchProfile();
+      alert("Profile updated successfully!");
+    } catch (err: any) { alert("Failed to update profile: " + err.message); }
   };
 
   const handleSetupBusiness = async () => {
     if (!businessName.trim()) return;
     try {
       const { data: bizData, error } = await supabase.from("business_profiles").insert({
-        user_id: user.id,
-        business_name: businessName,
-        category: businessCategory,
-        auto_reply_enabled: !!autoReply,
-        auto_reply_message: autoReply || null
+        user_id: user.id, business_name: businessName, category: businessCategory,
+        auto_reply_enabled: !!autoReply, auto_reply_message: autoReply || null
       }).select().single();
-      
       if (error) throw error;
-
       await supabase.from("business_ai_settings").insert({
-        business_id: bizData.id,
-        auto_reply_enabled: !!autoReply,
-        ai_tone: aiTone
+        business_id: bizData.id, auto_reply_enabled: !!autoReply, ai_tone: "professional"
       });
-
       setShowBusinessSetup(false);
-      setBusinessName("");
-      setBusinessCategory("");
-      setAutoReply("");
-      fetchBusinessProfile();      alert("Business profile created with AI Auto-Reply!");
-    } catch (err: any) {
-      alert("Failed to setup business: " + err.message);
-    }
+      setBusinessName(""); setBusinessCategory(""); setAutoReply("");
+      fetchBusinessProfile();
+      alert("Business profile created with AI Auto-Reply!");
+    } catch (err: any) { alert("Failed to setup business: " + err.message); }
   };
 
   const startWatchingAd = (ad: AdCampaign) => {
-    setWatchingAd(ad);
-    setAdProgress(0);
+    setWatchingAd(ad); setAdProgress(0);
     let progress = 0;
     const interval = setInterval(() => {
-      progress += 10;
-      setAdProgress(progress);
-      if (progress >= 100) {
-        clearInterval(interval);
-        claimReward(ad.id);
-      }
+      progress += 10; setAdProgress(progress);
+      if (progress >= 100) { clearInterval(interval); claimReward(ad.id); }
     }, 300);
   };
 
@@ -272,18 +292,12 @@ export function GChatApp() {
         setWatchingAd(null);
         alert(`✅ You earned $${((watchingAd?.reward_amount || 0) / 100).toFixed(2)}!`);
         fetchWalletData();
-      }, 1000);
-    } catch (err: any) {
-      alert(err.message || "You already watched this ad!");
-      setWatchingAd(null);
-    }
+      }, 1000);    } catch (err: any) { alert(err.message || "You already watched this ad!"); setWatchingAd(null); }
   };
 
   const generateAISummary = () => {
     setAiSummary("🤖 AI is analyzing your chat...");
-    setTimeout(() => {
-      setAiSummary(`🤖 AI Summary: You exchanged ${messages.length} messages. The conversation is active and healthy.`);
-    }, 1500);
+    setTimeout(() => { setAiSummary(`🤖 AI Summary: You exchanged ${messages.length} messages. The conversation is active and healthy.`); }, 1500);
   };
 
   const handleCreatePost = async () => {
@@ -292,7 +306,8 @@ export function GChatApp() {
     let mediaUrl = null;
     try {
       if (postImage) {
-        const compressedFile = await imageCompression(postImage, { maxSizeMB: 2, maxWidthOrHeight: 1920, useWebWorker: true });        const fileName = `${user.id}/posts/${Date.now()}.${compressedFile.name.split('.').pop()}`;
+        const compressedFile = await imageCompression(postImage, { maxSizeMB: 2, maxWidthOrHeight: 1920, useWebWorker: true });
+        const fileName = `${user.id}/posts/${Date.now()}.${compressedFile.name.split('.').pop()}`;
         const { data: uploadData } = await supabase.storage.from("messages").upload(fileName, compressedFile);
         if (uploadData) {
           const { data: urlData } = supabase.storage.from("messages").getPublicUrl(uploadData.path);
@@ -300,15 +315,21 @@ export function GChatApp() {
         }
       }
       await supabase.from("posts").insert({ user_id: user.id, content: postContent.trim(), media_url: mediaUrl, post_type: "post" });
-      setShowCreatePost(false);
-      setPostContent("");
-      setPostImage(null);
-      setPostImagePreview(null);
+      setShowCreatePost(false); setPostContent(""); setPostImage(null); setPostImagePreview(null);
       fetchFeedData();
-    } catch (err: any) {
-      alert("Failed to create post: " + err.message);
-    } finally {
-      setIsPosting(false);
+    } catch (err: any) { alert("Failed to create post: " + err.message); }
+    finally { setIsPosting(false); }
+  };
+
+  const handleLikePost = async (postId: string) => {
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    if (post.is_liked) {
+      await supabase.from("post_likes").delete().eq("user_id", user.id).eq("post_id", postId);
+      setPosts(posts.map(p => p.id === postId ? { ...p, is_liked: false, likes_count: (p.likes_count || 1) - 1 } : p));
+    } else {
+      await supabase.from("post_likes").insert({ user_id: user.id, post_id: postId });
+      setPosts(posts.map(p => p.id === postId ? { ...p, is_liked: true, likes_count: (p.likes_count || 0) + 1 } : p));
     }
   };
 
@@ -316,33 +337,256 @@ export function GChatApp() {
     if (!newGroupName.trim()) return;
     try {
       const { data } = await supabase.from("groups").insert({
-        name: newGroupName,
-        description: newGroupDesc,
-        owner_id: user.id,
-        group_type: "group"
+        name: newGroupName, description: newGroupDesc, owner_id: user.id, group_type: "group"
       }).select().single();
-      
       if (data) {
         await supabase.from("group_members").insert({ group_id: data.id, user_id: user.id, role: "owner" });
-        setShowCreateGroup(false);
-        setNewGroupName("");
-        setNewGroupDesc("");
-        fetchGroups();
-        alert("Group created successfully!");
+        setShowCreateGroup(false); setNewGroupName(""); setNewGroupDesc("");        fetchGroups(); alert("Group created successfully!");
       }
-    } catch (err: any) {
-      alert("Failed to create group: " + err.message);
-    }
+    } catch (err: any) { alert("Failed to create group: " + err.message); }
   };
 
   const openChat = (chat: Chat) => { setActiveChatId(chat.id); setActiveChatName(chat.name); setView("conversation"); setAiSummary(null); };
+  const openProfile = (profileData: UserProfile) => { setViewingProfile(profileData); };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617]"><Loader2 className="h-8 w-8 animate-spin text-cyan-400" /></div>;
   if (!user) return null;
 
   return (
-    <div className="relative min-h-screen w-full max-w-md mx-auto text-white overflow-hidden font-sans">      <GChatBackground />
+    <div className="relative min-h-screen w-full max-w-md mx-auto text-white overflow-hidden font-sans">
+      <GChatBackground />
 
+      {/* PROFILE VIEW */}
+      {view === "profile" && profile && (
+        <div className="relative z-10 flex flex-col min-h-screen pb-24">
+          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
+            <h1 className="text-xl font-bold">My Profile</h1>
+            <button onClick={() => setShowEditProfile(true)} className="p-2 rounded-full bg-emerald-500/20 text-emerald-400"><Edit3 className="h-5 w-5" /></button>
+          </header>
+          <div className="flex-1 overflow-y-auto p-4">
+            {/* Profile Card */}
+            <div className="relative p-6 rounded-3xl bg-gradient-to-br from-cyan-600 to-purple-700 shadow-2xl mb-6 text-center">
+              <div className="w-24 h-24 rounded-full bg-white/20 backdrop-blur border-4 border-white/30 mx-auto mb-4 flex items-center justify-center overflow-hidden">
+                {profile.avatar_url ? <img src={profile.avatar_url} className="w-full h-full object-cover" /> : <User className="h-12 w-12" />}
+              </div>
+              <h2 className="text-2xl font-bold">{profile.display_name || "User"}</h2>
+              <p className="text-sm text-cyan-100">@{profile.username || "username"}</p>
+              {profile.badges && profile.badges.length > 0 && (
+                <div className="flex justify-center gap-2 mt-2">
+                  {profile.badges.map((badge, i) => <span key={i} className="px-2 py-1 rounded-full bg-white/20 text-xs flex items-center gap-1"><Award className="h-3 w-3" />{badge}</span>)}
+                </div>
+              )}
+              <p className="text-sm mt-3 text-white/80">{profile.bio || "No bio yet"}</p>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="p-3 rounded-2xl bg-white/5 border border-white/5 text-center">
+                <Eye className="h-5 w-5 text-cyan-400 mx-auto mb-1" />
+                <p className="text-lg font-bold">{profile.profile_views || 0}</p>
+                <p className="text-xs text-gray-400">Views</p>
+              </div>
+              <div className="p-3 rounded-2xl bg-white/5 border border-white/5 text-center">
+                <MessageSquare className="h-5 w-5 text-purple-400 mx-auto mb-1" />
+                <p className="text-lg font-bold">{profile.posts_count || 0}</p>
+                <p className="text-xs text-gray-400">Posts</p>
+              </div>              <div className="p-3 rounded-2xl bg-white/5 border border-white/5 text-center">
+                <Send className="h-5 w-5 text-emerald-400 mx-auto mb-1" />
+                <p className="text-lg font-bold">{profile.messages_sent || 0}</p>
+                <p className="text-xs text-gray-400">Messages</p>
+              </div>
+            </div>
+
+            {/* Contact Info */}
+            <div className="space-y-3 mb-6">
+              <h3 className="text-lg font-bold mb-2">Contact Details</h3>
+              {profile.email && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><Mail className="h-5 w-5 text-blue-400" /><div><p className="text-xs text-gray-400">Email</p><p className="text-sm">{profile.email}</p></div></div>}
+              {profile.phone && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><PhoneCall className="h-5 w-5 text-green-400" /><div><p className="text-xs text-gray-400">Phone</p><p className="text-sm">{profile.phone}</p></div></div>}
+              {profile.whatsapp && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><PhoneCall className="h-5 w-5 text-emerald-400" /><div><p className="text-xs text-gray-400">WhatsApp</p><p className="text-sm">{profile.whatsapp}</p></div></div>}
+              {profile.address && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><MapPin className="h-5 w-5 text-red-400" /><div><p className="text-xs text-gray-400">Address</p><p className="text-sm">{profile.address}</p></div></div>}
+            </div>
+
+            {/* Social Links */}
+            {(profile.instagram || profile.twitter || profile.website) && (
+              <div className="space-y-3 mb-6">
+                <h3 className="text-lg font-bold mb-2">Social Links</h3>
+                {profile.instagram && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><Instagram className="h-5 w-5 text-pink-400" /><p className="text-sm">{profile.instagram}</p></div>}
+                {profile.twitter && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><Twitter className="h-5 w-5 text-blue-400" /><p className="text-sm">{profile.twitter}</p></div>}
+                {profile.website && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><Globe className="h-5 w-5 text-cyan-400" /><p className="text-sm">{profile.website}</p></div>}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setView("analytics")} className="p-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-left">
+                <BarChart3 className="h-6 w-6 text-purple-400 mb-2" />
+                <p className="font-bold text-sm">Analytics</p>
+                <p className="text-xs text-gray-400">View your stats</p>
+              </button>
+              <button onClick={() => setView("settings")} className="p-4 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-left">
+                <Settings className="h-6 w-6 text-cyan-400 mb-2" />
+                <p className="font-bold text-sm">Settings</p>
+                <p className="text-xs text-gray-400">Privacy & more</p>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PROFILE VIEW */}
+      {view === "edit-profile" && (
+        <div className="relative z-10 flex flex-col min-h-screen pb-24">
+          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
+            <button onClick={() => setView("profile")} className="p-2 rounded-full bg-white/5"><ArrowLeft className="h-5 w-5" /></button>
+            <h1 className="text-xl font-bold">Edit Profile</h1>
+            <button onClick={handleSaveProfile} className="p-2 rounded-full bg-emerald-500/20 text-emerald-400"><Save className="h-5 w-5" /></button>          </header>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Avatar Upload */}
+            <div className="text-center">
+              <div className="w-24 h-24 rounded-full bg-white/10 border-2 border-dashed border-white/30 mx-auto mb-2 flex items-center justify-center overflow-hidden">
+                {profileAvatarPreview ? <img src={profileAvatarPreview} className="w-full h-full object-cover" /> : <Camera className="h-8 w-8 text-gray-400" />}
+              </div>
+              <button onClick={() => document.getElementById('avatar-input')?.click()} className="text-sm text-cyan-400">Change Avatar</button>
+              <input id="avatar-input" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if(f) { setProfileAvatar(f); setProfileAvatarPreview(URL.createObjectURL(f)); }}} />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Display Name</label>
+              <input value={editForm.display_name} onChange={(e) => setEditForm({...editForm, display_name: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Username</label>
+              <input value={editForm.username} onChange={(e) => setEditForm({...editForm, username: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Bio</label>
+              <textarea value={editForm.bio} onChange={(e) => setEditForm({...editForm, bio: e.target.value})} className="w-full h-20 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white resize-none" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Email</label>
+              <input value={editForm.email} onChange={(e) => setEditForm({...editForm, email: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Phone Number</label>
+              <input value={editForm.phone} onChange={(e) => setEditForm({...editForm, phone: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">WhatsApp Number</label>
+              <input value={editForm.whatsapp} onChange={(e) => setEditForm({...editForm, whatsapp: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Address</label>
+              <input value={editForm.address} onChange={(e) => setEditForm({...editForm, address: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Instagram</label>
+              <input value={editForm.instagram} onChange={(e) => setEditForm({...editForm, instagram: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Twitter/X</label>
+              <input value={editForm.twitter} onChange={(e) => setEditForm({...editForm, twitter: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Website</label>
+              <input value={editForm.website} onChange={(e) => setEditForm({...editForm, website: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />            </div>
+            <button onClick={handleSaveProfile} className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold">Save Profile</button>
+          </div>
+        </div>
+      )}
+
+      {/* ANALYTICS VIEW */}
+      {view === "analytics" && profile && (
+        <div className="relative z-10 flex flex-col min-h-screen pb-24">
+          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center gap-3">
+            <button onClick={() => setView("profile")} className="p-2 rounded-full bg-white/5"><ArrowLeft className="h-5 w-5" /></button>
+            <h1 className="text-xl font-bold">Analytics</h1>
+          </header>
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30">
+                <Eye className="h-6 w-6 text-cyan-400 mb-2" />
+                <p className="text-2xl font-bold">{profile.profile_views || 0}</p>
+                <p className="text-xs text-gray-400">Profile Views</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
+                <Heart className="h-6 w-6 text-purple-400 mb-2" />
+                <p className="text-2xl font-bold">{(profile.posts_count || 0) * 3}</p>
+                <p className="text-xs text-gray-400">Total Likes</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-green-500/20 border border-emerald-500/30">
+                <Send className="h-6 w-6 text-emerald-400 mb-2" />
+                <p className="text-2xl font-bold">{profile.messages_sent || 0}</p>
+                <p className="text-xs text-gray-400">Messages Sent</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/30">
+                <Banknote className="h-6 w-6 text-yellow-400 mb-2" />
+                <p className="text-2xl font-bold">${(walletBalance / 100).toFixed(2)}</p>
+                <p className="text-xs text-gray-400">Earned</p>
+              </div>
+            </div>
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+              <h3 className="font-bold mb-3 flex items-center gap-2"><TrendingUp className="h-5 w-5 text-cyan-400" /> Growth</h3>
+              <div className="space-y-3">
+                <div><div className="flex justify-between text-sm mb-1"><span>Profile Views</span><span className="text-cyan-400">+12%</span></div><div className="h-2 bg-white/10 rounded-full"><div className="h-2 bg-cyan-400 rounded-full" style={{width: '65%'}} /></div></div>
+                <div><div className="flex justify-between text-sm mb-1"><span>Post Engagement</span><span className="text-purple-400">+8%</span></div><div className="h-2 bg-white/10 rounded-full"><div className="h-2 bg-purple-400 rounded-full" style={{width: '45%'}} /></div></div>
+                <div><div className="flex justify-between text-sm mb-1"><span>Message Activity</span><span className="text-emerald-400">+23%</span></div><div className="h-2 bg-white/10 rounded-full"><div className="h-2 bg-emerald-400 rounded-full" style={{width: '78%'}} /></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SETTINGS VIEW */}
+      {view === "settings" && (        <div className="relative z-10 flex flex-col min-h-screen pb-24">
+          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center gap-3">
+            <button onClick={() => setView("profile")} className="p-2 rounded-full bg-white/5"><ArrowLeft className="h-5 w-5" /></button>
+            <h1 className="text-xl font-bold">Settings</h1>
+          </header>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <button className="w-full flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 text-left"><Shield className="h-5 w-5 text-cyan-400" /><div className="flex-1"><p className="font-medium">Privacy</p><p className="text-xs text-gray-400">Read receipts, online status</p></div></button>
+            <button className="w-full flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 text-left"><Bell className="h-5 w-5 text-purple-400" /><div className="flex-1"><p className="font-medium">Notifications</p><p className="text-xs text-gray-400">Messages, calls, rewards</p></div></button>
+            <button className="w-full flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 text-left"><Palette className="h-5 w-5 text-pink-400" /><div className="flex-1"><p className="font-medium">Appearance</p><p className="text-xs text-gray-400">Themes, chat colors</p></div></button>
+            <button className="w-full flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 text-left"><Bot className="h-5 w-5 text-emerald-400" /><div className="flex-1"><p className="font-medium">AI Assistant</p><p className="text-xs text-gray-400">Smart replies, summaries</p></div></button>
+            <button className="w-full flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 text-left"><Lock className="h-5 w-5 text-yellow-400" /><div className="flex-1"><p className="font-medium">Security</p><p className="text-xs text-gray-400">2FA, secret chats</p></div></button>
+            <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center gap-3 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-left mt-6"><LogOut className="h-5 w-5 text-red-400" /><div className="flex-1"><p className="font-medium text-red-400">Logout</p></div></button>
+          </div>
+        </div>
+      )}
+
+      {/* FEED VIEW */}
+      {view === "feed" && (
+        <div className="relative z-10 flex flex-col min-h-screen pb-24">
+          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
+            <h1 className="text-xl font-bold">G-Feed</h1>
+            <button onClick={() => setShowCreatePost(true)} className="p-2 rounded-full bg-emerald-500/20 text-emerald-400"><Plus className="h-5 w-5" /></button>
+          </header>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {posts.length === 0 ? (
+              <div className="text-center py-20 text-gray-500">
+                <ImageIcon className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                <p>No posts yet. Be the first to share!</p>
+              </div>
+            ) : posts.map((post) => (
+              <div key={post.id} className="bg-white/5 border border-white/5 rounded-2xl overflow-hidden">
+                <div className="flex items-center justify-between p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold">{post.profiles?.display_name?.charAt(0) || "U"}</div>
+                    <div><p className="font-medium text-white text-sm">{post.profiles?.display_name || "User"}</p><p className="text-xs text-gray-500">{format(new Date(post.created_at), "MMM d, HH:mm")}</p></div>
+                  </div>
+                </div>
+                {post.content && <p className="px-3 pb-2 text-sm text-gray-200">{post.content}</p>}
+                {post.media_url && <img src={post.media_url} alt="Post" className="w-full max-h-96 object-cover" />}
+                <div className="p-3 flex items-center gap-4 border-t border-white/5">
+                  <button onClick={() => handleLikePost(post.id)} className={`flex items-center gap-2 ${post.is_liked ? 'text-red-500' : 'text-gray-400'}`}>
+                    <Heart className={`h-5 w-5 ${post.is_liked ? 'fill-current' : ''}`} /><span className="text-sm">{post.likes_count || 0}</span>
+                  </button>
+                  <button className="flex items-center gap-2 text-gray-400"><MessageSquare className="h-5 w-5" /><span className="text-sm">Comment</span></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {/* G-TRIBE VIEW */}
       {view === "gtribe" && (
         <div className="relative z-10 flex flex-col min-h-screen pb-24">
@@ -360,10 +604,7 @@ export function GChatApp() {
               <button key={group.id} className="w-full p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 text-left">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center font-bold">{group.name.charAt(0).toUpperCase()}</div>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-white">{group.name}</h3>
-                    <p className="text-xs text-gray-400">{group.member_count} members • {group.group_type}</p>
-                  </div>
+                  <div className="flex-1"><h3 className="font-bold text-white">{group.name}</h3><p className="text-xs text-gray-400">{group.member_count} members • {group.group_type}</p></div>
                 </div>
               </button>
             ))}
@@ -390,11 +631,11 @@ export function GChatApp() {
               <div className="space-y-4">
                 <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-600 to-cyan-700">
                   <h2 className="text-xl font-bold">{businessProfile.business_name}</h2>
-                  <p className="text-sm text-emerald-100">{businessProfile.category}</p>                  {businessProfile.is_verified && <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 rounded bg-white/20 text-xs"><CheckCircle2 className="h-3 w-3" /> Verified</span>}
+                  <p className="text-sm text-emerald-100">{businessProfile.category}</p>
+                  {businessProfile.is_verified && <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 rounded bg-white/20 text-xs"><CheckCircle2 className="h-3 w-3" /> Verified</span>}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <button className="p-4 rounded-xl bg-white/5 border border-white/5 text-left"><BarChart3 className="h-6 w-6 text-cyan-400 mb-2" /><p className="text-sm font-medium">Analytics</p></button>
-                  <button className="p-4 rounded-xl bg-white/5 border border-white/5 text-left"><MessageCircleReply className="h-6 w-6 text-purple-400 mb-2" /><p className="text-sm font-medium">AI Auto-Reply {businessProfile.auto_reply_enabled ? '✅' : '❌'}</p></button>
+                  <button className="p-4 rounded-xl bg-white/5 border border-white/5 text-left"><BarChart3 className="h-6 w-6 text-cyan-400 mb-2" /><p className="text-sm font-medium">Analytics</p></button>                  <button className="p-4 rounded-xl bg-white/5 border border-white/5 text-left"><MessageCircleReply className="h-6 w-6 text-purple-400 mb-2" /><p className="text-sm font-medium">AI Auto-Reply {businessProfile.auto_reply_enabled ? '✅' : '❌'}</p></button>
                   <button className="p-4 rounded-xl bg-white/5 border border-white/5 text-left"><Users2 className="h-6 w-6 text-pink-400 mb-2" /><p className="text-sm font-medium">Customers</p></button>
                   <button className="p-4 rounded-xl bg-white/5 border border-white/5 text-left"><Settings className="h-6 w-6 text-orange-400 mb-2" /><p className="text-sm font-medium">Settings</p></button>
                 </div>
@@ -439,11 +680,11 @@ export function GChatApp() {
       {view === "home" && (
         <div className="relative z-10 flex flex-col min-h-screen p-6 pb-24">
           <div className="flex justify-between items-center mb-8">
-            <div className="flex items-center gap-2">              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center font-bold text-black text-xl">G</div>
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center font-bold text-black text-xl">G</div>
               <span className="font-bold text-lg">G-Chat</span>
             </div>
-            <button onClick={() => supabase.auth.signOut()} className="p-2 rounded-full bg-white/5"><LogOut className="h-5 w-5 text-gray-400" /></button>
-          </div>
+            <button onClick={() => setView("profile")} className="p-2 rounded-full bg-white/5"><User className="h-5 w-5 text-gray-400" /></button>          </div>
           <div className="text-center mb-10 mt-4">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-cyan-200 to-emerald-300 bg-clip-text text-transparent mb-2">One World. One App.</h1>
             <p className="text-lg font-medium text-purple-400 mb-4">Infinite Possibilities.</p>
@@ -452,7 +693,7 @@ export function GChatApp() {
             <button onClick={() => setView("gtribe")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Users2 className="h-8 w-8 text-purple-400 mb-3" /><h3 className="font-bold">G-Tribe</h3><p className="text-xs text-gray-400">Groups & Communities</p></button>
             <button onClick={() => setView("wallet")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Wallet className="h-8 w-8 text-blue-400 mb-3" /><h3 className="font-bold">G-Pay</h3><p className="text-xs text-gray-400">Wallet & Earn</p></button>
             <button onClick={() => setView("gchatone")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Building2 className="h-8 w-8 text-emerald-400 mb-3" /><h3 className="font-bold">G-Chat One</h3><p className="text-xs text-gray-400">Business & AI</p></button>
-            <button className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Smartphone className="h-8 w-8 text-orange-400 mb-3" /><h3 className="font-bold">G-Chat one</h3><p className="text-xs text-gray-400">All-in-One</p></button>
+            <button onClick={() => setView("feed")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><ImageIcon className="h-8 w-8 text-orange-400 mb-3" /><h3 className="font-bold">G-Feed</h3><p className="text-xs text-gray-400">Social Posts</p></button>
           </div>
           <div className="flex-1" />
           <button onClick={() => setView("list")} className="w-full p-4 rounded-2xl bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/30 backdrop-blur-xl flex items-center gap-4">
@@ -488,11 +729,11 @@ export function GChatApp() {
       {view === "conversation" && activeChatId && (
         <div className="relative z-10 flex flex-col min-h-screen">
           <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center gap-3">
-            <button onClick={() => setView("list")} className="p-2 -ml-2 rounded-full hover:bg-white/5"><ArrowLeft className="h-5 w-5" /></button>            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold">{activeChatName.charAt(0).toUpperCase()}</div>
+            <button onClick={() => setView("list")} className="p-2 -ml-2 rounded-full hover:bg-white/5"><ArrowLeft className="h-5 w-5" /></button>
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold">{activeChatName.charAt(0).toUpperCase()}</div>
             <div className="flex-1"><h1 className="font-semibold text-white text-sm">{activeChatName}</h1><p className="text-xs text-emerald-400">Online</p></div>
             <button onClick={generateAISummary} className="p-2 rounded-full hover:bg-white/5 text-purple-400"><Sparkles className="h-5 w-5" /></button>
-          </header>
-          {aiSummary && <div className="mx-4 mt-4 p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-sm text-purple-200">{aiSummary}</div>}
+          </header>          {aiSummary && <div className="mx-4 mt-4 p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-sm text-purple-200">{aiSummary}</div>}
           <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
             {messages.map((msg) => {
               const isOwn = msg.user_id === user.id;
@@ -532,25 +773,18 @@ export function GChatApp() {
             <input value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="Account Name" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-4" />
             <div className="flex gap-2">
               <button onClick={() => setShowWithdraw(false)} className="flex-1 py-3 rounded-xl bg-white/5">Cancel</button>
-              <button onClick={handleWithdraw} disabled={isWithdrawing} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold disabled:opacity-50">
-                {isWithdrawing ? "Processing..." : "Withdraw"}
-              </button>
+              <button onClick={handleWithdraw} disabled={isWithdrawing} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold disabled:opacity-50">{isWithdrawing ? "Processing..." : "Withdraw"}</button>
             </div>
           </div>
-        </div>      )}
+        </div>
+      )}
 
       {showBusinessSetup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setShowBusinessSetup(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-6" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Sparkles className="h-5 w-5 text-purple-400"/> Setup Business AI</h3>
-            <input value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Business name" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-3" />
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Sparkles className="h-5 w-5 text-purple-400"/> Setup Business AI</h3>            <input value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Business name" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-3" />
             <input value={businessCategory} onChange={(e) => setBusinessCategory(e.target.value)} placeholder="Category" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-3" />
-            <select value={aiTone} onChange={(e) => setAiTone(e.target.value)} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-3">
-              <option value="professional">Professional Tone</option>
-              <option value="friendly">Friendly Tone</option>
-              <option value="casual">Casual Tone</option>
-            </select>
-            <textarea value={autoReply} onChange={(e) => setAutoReply(e.target.value)} placeholder="AI Auto-Reply message (leave blank for smart AI)" className="w-full h-20 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-4 resize-none" />
+            <textarea value={autoReply} onChange={(e) => setAutoReply(e.target.value)} placeholder="AI Auto-Reply message" className="w-full h-20 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-4 resize-none" />
             <div className="flex gap-2">
               <button onClick={() => setShowBusinessSetup(false)} className="flex-1 py-3 rounded-xl bg-white/5">Cancel</button>
               <button onClick={handleSetupBusiness} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold">Setup</button>
@@ -586,7 +820,8 @@ export function GChatApp() {
               <button onClick={() => document.getElementById('post-image-input')?.click()} className="flex-1 py-3 rounded-xl bg-white/5 flex items-center justify-center gap-2"><ImageIcon className="h-5 w-5" /> Photo</button>
               <button onClick={handleCreatePost} disabled={isPosting} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold disabled:opacity-50">{isPosting ? "Posting..." : "Post"}</button>
             </div>
-            <input id="post-image-input" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if(f) { setPostImage(f); setPostImagePreview(URL.createObjectURL(f)); }}} />          </div>
+            <input id="post-image-input" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if(f) { setPostImage(f); setPostImagePreview(URL.createObjectURL(f)); }}} />
+          </div>
         </div>
       )}
 
@@ -596,8 +831,7 @@ export function GChatApp() {
             <h3 className="text-lg font-bold mb-4">Send Money</h3>
             <p className="text-sm text-gray-400 mb-4">Balance: ${(walletBalance / 100).toFixed(2)}</p>
             <input type="number" value={sendAmount} onChange={(e) => setSendAmount(e.target.value)} placeholder="Amount (USD)" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-4 outline-none" />
-            <div className="flex gap-2">
-              <button onClick={() => setShowSendMoney(false)} className="flex-1 py-3 rounded-xl bg-white/5">Cancel</button>
+            <div className="flex gap-2">              <button onClick={() => setShowSendMoney(false)} className="flex-1 py-3 rounded-xl bg-white/5">Cancel</button>
               <button onClick={handleSendMoney} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold">Send</button>
             </div>
           </div>
@@ -616,13 +850,14 @@ export function GChatApp() {
         </div>
       )}
 
-      {/* BOTTOM NAVIGATION */}
+      {/* BOTTOM NAVIGATION - 5 TABS */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#020617]/95 backdrop-blur-xl border-t border-white/10 max-w-md mx-auto pb-safe">
         <div className="flex justify-around items-center h-16">
-          <button onClick={() => setView("home")} className={`flex flex-col items-center gap-1 ${view === "home" ? "text-cyan-400" : "text-gray-500"}`}><MessageCircle className="h-6 w-6" /><span className="text-[10px]">Home</span></button>
-          <button onClick={() => setView("list")} className={`flex flex-col items-center gap-1 ${view === "list" || view === "conversation" ? "text-cyan-400" : "text-gray-500"}`}><Users className="h-6 w-6" /><span className="text-[10px]">Chats</span></button>
-          <button onClick={() => setView("gtribe")} className={`flex flex-col items-center gap-1 ${view === "gtribe" ? "text-cyan-400" : "text-gray-500"}`}><Users2 className="h-6 w-6" /><span className="text-[10px]">G-Tribe</span></button>
-          <button onClick={() => setView("wallet")} className={`flex flex-col items-center gap-1 ${view === "wallet" ? "text-cyan-400" : "text-gray-500"}`}><Wallet className="h-6 w-6" /><span className="text-[10px]">G-Pay</span></button>
+          <button onClick={() => setView("home")} className={`flex flex-col items-center gap-1 ${view === "home" ? "text-cyan-400" : "text-gray-500"}`}><MessageCircle className="h-5 w-5" /><span className="text-[9px]">Home</span></button>
+          <button onClick={() => setView("list")} className={`flex flex-col items-center gap-1 ${view === "list" || view === "conversation" ? "text-cyan-400" : "text-gray-500"}`}><Users className="h-5 w-5" /><span className="text-[9px]">Chats</span></button>
+          <button onClick={() => setView("feed")} className={`flex flex-col items-center gap-1 ${view === "feed" ? "text-cyan-400" : "text-gray-500"}`}><ImageIcon className="h-5 w-5" /><span className="text-[9px]">Feed</span></button>
+          <button onClick={() => setView("wallet")} className={`flex flex-col items-center gap-1 ${view === "wallet" ? "text-cyan-400" : "text-gray-500"}`}><Wallet className="h-5 w-5" /><span className="text-[9px]">G-Pay</span></button>
+          <button onClick={() => setView("profile")} className={`flex flex-col items-center gap-1 ${view === "profile" || view === "edit-profile" || view === "analytics" || view === "settings" ? "text-cyan-400" : "text-gray-500"}`}><User className="h-5 w-5" /><span className="text-[9px]">Profile</span></button>
         </div>
       </nav>
     </div>
