@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -27,6 +28,23 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        {/* OneSignal Initialization Script */}
+        <Script 
+          src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" 
+          strategy="afterInteractive" 
+        />
+        <Script id="onesignal-init" strategy="afterInteractive">
+          {`
+            window.OneSignalDeferred = window.OneSignalDeferred || [];
+            OneSignalDeferred.push(async function(OneSignal) {
+              await OneSignal.init({
+                appId: "d898eed6-7af6-4ba7-8290-e4509649aa6f",
+              });
+            });
+          `}
+        </Script>
+      </head>
       <body className="antialiased bg-[#020617] text-white">{children}</body>
     </html>
   );
