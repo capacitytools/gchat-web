@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { 
   ArrowLeft, MessageCircle, Users, Wallet, Smartphone, Send, LogOut, 
-  Loader2, Paperclip, Plus, Phone, Video, CreditCard, TrendingUp, 
+  Loader2, Paperclip, Plus, Phone, CreditCard, TrendingUp, 
   ArrowDownLeft, ArrowUpRight, Sparkles, PlayCircle, CheckCircle2,
   Heart, MessageSquare, Image as ImageIcon, X, MoreHorizontal
 } from "lucide-react";
@@ -24,9 +24,7 @@ type Post = {
   media_url: string | null; 
   post_type: string; 
   created_at: string;
-  profiles: { username: string; display_name: string };
-  likes_count: number;
-  comments_count: number;
+  profiles: { username: string; display_name: string } | null;
   is_liked: boolean;
 };
 
@@ -47,18 +45,18 @@ export function GChatApp() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showSendMoney, setShowSendMoney] = useState(false);
   const [sendAmount, setSendAmount] = useState("");
+
   const [availableAds, setAvailableAds] = useState<AdCampaign[]>([]);
-  const [watchingAd, setWatchingAd] = useState<AdCampaign | null>(null);
-  const [adProgress, setAdProgress] = useState(0);
+  const [watchingAd, setWatchingAd] = useState<AdCampaign | null>(null);  const [adProgress, setAdProgress] = useState(0);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
 
   // Feed States
   const [posts, setPosts] = useState<Post[]>([]);
-  const [stories, setStories] = useState<Post[]>([]);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [postContent, setPostContent] = useState("");
   const [postImage, setPostImage] = useState<File | null>(null);
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
+  const [isPosting, setIsPosting] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -96,9 +94,9 @@ export function GChatApp() {
 
   const fetchChats = async () => {
     if (!user) return;
-    const { data } = await supabase.from("chat_members").select("chat_id, chats(id, name, created_at)").eq("user_id", user.id);    if (data) setChats(data.map((item: any) => ({ id: item.chats.id, name: item.chats.name, updated_at: item.chats.created_at })));
+    const { data } = await supabase.from("chat_members").select("chat_id, chats(id, name, created_at)").eq("user_id", user.id);
+    if (data) setChats(data.map((item: any) => ({ id: item.chats.id, name: item.chats.name, updated_at: item.chats.created_at })));
   };
-
   const fetchMessages = async (chatId: string) => {
     const { data } = await supabase.from("messages").select("*").eq("chat_id", chatId).order("created_at", { ascending: true });
     if (data) setMessages(data);
@@ -117,48 +115,37 @@ export function GChatApp() {
   const fetchFeedData = async () => {
     if (!user) return;
     
-    // Fetch posts with user info
-    const { data: postsData } = await supabase
+    // 1. Fetch Posts simply
+    const { data: postsData, error } = await supabase
       .from("posts")
-      .select(`
-        *,
-        profiles:user_id (username, display_name),
-        likes_count: post_likes(count),
-        comments_count: post_comments(count)
-      `)
+      .select("*, profiles:user_id(username, display_name)")
       .eq("post_type", "post")
       .order("created_at", { ascending: false })
       .limit(20);
 
-    // Fetch stories (last 24 hours)
-    const { data: storiesData } = await supabase
-      .from("posts")
-      .select(`
-        *,
-        profiles:user_id (username, display_name)
-      `)
-      .eq("post_type", "story")
-      .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-      .order("created_at", { ascending: false });
+    if (error) {
+      console.error("Feed fetch error:", error);
+      return;
+    }
 
+    // 2. Check likes for each post
     if (postsData) {
       const postsWithLikes = await Promise.all(postsData.map(async (post: any) => {
         const { data: likeData } = await supabase
           .from("post_likes")
-          .select("*")          .eq("user_id", user.id)
+          .select("id")
+          .eq("user_id", user.id)
           .eq("post_id", post.id)
           .single();
         return { ...post, is_liked: !!likeData };
       }));
       setPosts(postsWithLikes);
     }
-    if (storiesData) setStories(storiesData);
   };
 
   const sendMessage = async () => {
     if (!draft.trim()) return;
-    const { data } = await supabase.from("messages").insert({ chat_id: activeChatId, user_id: user.id, text: draft }).select().single();
-    if (data) setMessages((prev) => [...prev, data]);
+    const { data } = await supabase.from("messages").insert({ chat_id: activeChatId, user_id: user.id, text: draft }).select().single();    if (data) setMessages((prev) => [...prev, data]);
     setDraft("");
   };
 
@@ -169,7 +156,7 @@ export function GChatApp() {
     if (!members || members.length === 0) return;
     const receiverId = members[0].user_id;
     const { error } = await supabase.from("transactions").insert({ sender_id: user.id, receiver_id: receiverId, amount: amount, type: 'transfer' });
-    if (error) { alert("Failed to send money."); return; }
+    if (error) { alert("Failed to send money: " + error.message); return; }
     setWalletBalance(prev => prev - amount);
     setShowSendMoney(false);
     setSendAmount("");
@@ -194,7 +181,8 @@ export function GChatApp() {
     try {
       const { error } = await supabase.rpc('claim_ad_reward', { target_campaign_id: adId });
       if (error) throw error;
-      setWalletBalance(prev => prev + (watchingAd?.reward_amount || 0));      setTimeout(() => {
+      setWalletBalance(prev => prev + (watchingAd?.reward_amount || 0));
+      setTimeout(() => {
         setWatchingAd(null);
         alert(` You earned $${((watchingAd?.reward_amount || 0) / 100).toFixed(2)}!`);
         fetchWalletData();
@@ -206,52 +194,75 @@ export function GChatApp() {
   };
 
   const generateAISummary = () => {
-    setAiSummary("AI is analyzing your chat...");
-    setTimeout(() => {
+    setAiSummary("AI is analyzing your chat...");    setTimeout(() => {
       const totalMsgs = messages.length;
       const lastMsg = messages[messages.length - 1]?.text || "nothing";
       setAiSummary(`Summary: You exchanged ${totalMsgs} messages. Last topic: "${lastMsg.substring(0, 30)}..."`);
     }, 1500);
   };
 
+  // --- FIXED POST CREATION ---
   const handleCreatePost = async () => {
-    if (!postContent.trim() && !postImage) return;
-    
-    let mediaUrl = null;
-    if (postImage) {
-      const fileName = `${user.id}/posts/${Date.now()}.${postImage.name.split(".").pop()}`;
-      const { data } = await supabase.storage.from("messages").upload(fileName, postImage);
-      if (data) {
-        const { data: urlData } = supabase.storage.from("messages").getPublicUrl(data.path);
-        mediaUrl = urlData.publicUrl;
-      }
+    if (!postContent.trim() && !postImage) {
+      alert("Please add some text or a photo.");
+      return;
     }
-
-    const { error } = await supabase.from("posts").insert({
-      user_id: user.id,
-      content: postContent,
-      media_url: mediaUrl,
-      post_type: "post"
-    });
-
-    if (error) { alert("Failed to create post."); return; }
     
-    setShowCreatePost(false);
-    setPostContent("");
-    setPostImage(null);
-    setPostImagePreview(null);
-    fetchFeedData();
+    setIsPosting(true);
+    let mediaUrl = null;
+
+    try {
+      // 1. Upload Image if exists
+      if (postImage) {
+        const fileExt = postImage.name.split('.').pop() || 'jpg';
+        const fileName = `${user.id}/posts/${Date.now()}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("messages")
+          .upload(fileName, postImage);
+          
+        if (uploadError) throw uploadError;
+        
+        if (uploadData) {
+          const { data: urlData } = supabase.storage.from("messages").getPublicUrl(uploadData.path);
+          mediaUrl = urlData.publicUrl;
+        }
+      }
+
+      // 2. Insert Post into Database
+      const { error: dbError } = await supabase.from("posts").insert({
+        user_id: user.id,
+        content: postContent.trim(),
+        media_url: mediaUrl,
+        post_type: "post"
+      });
+
+      if (dbError) throw dbError;
+      
+      // 3. Success
+      setShowCreatePost(false);
+      setPostContent("");
+      setPostImage(null);
+      setPostImagePreview(null);      fetchFeedData(); // Refresh feed
+      
+    } catch (err: any) {
+      console.error("Post creation failed:", err);
+      alert("Failed to create post: " + (err.message || "Unknown error"));
+    } finally {
+      setIsPosting(false);
+    }
   };
 
-  const handleLikePost = async (postId: string) => {    const post = posts.find(p => p.id === postId);
+  const handleLikePost = async (postId: string) => {
+    const post = posts.find(p => p.id === postId);
     if (!post) return;
 
     if (post.is_liked) {
       await supabase.from("post_likes").delete().eq("user_id", user.id).eq("post_id", postId);
-      setPosts(posts.map(p => p.id === postId ? { ...p, is_liked: false, likes_count: p.likes_count - 1 } : p));
+      setPosts(posts.map(p => p.id === postId ? { ...p, is_liked: false } : p));
     } else {
       await supabase.from("post_likes").insert({ user_id: user.id, post_id: postId });
-      setPosts(posts.map(p => p.id === postId ? { ...p, is_liked: true, likes_count: p.likes_count + 1 } : p));
+      setPosts(posts.map(p => p.id === postId ? { ...p, is_liked: true } : p));
     }
   };
 
@@ -272,30 +283,6 @@ export function GChatApp() {
             <button onClick={() => setShowCreatePost(true)} className="p-2 rounded-full bg-emerald-500/20 text-emerald-400"><Plus className="h-5 w-5" /></button>
           </header>
 
-          {/* Stories Bar */}
-          <div className="bg-[#020617]/50 border-b border-white/5 p-3 overflow-x-auto">
-            <div className="flex gap-3">
-              <button onClick={() => setShowCreatePost(true)} className="flex flex-col items-center gap-1 shrink-0">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 p-0.5">
-                  <div className="w-full h-full rounded-full bg-[#020617] flex items-center justify-center">
-                    <Plus className="h-6 w-6 text-emerald-400" />
-                  </div>
-                </div>
-                <span className="text-xs text-gray-400">Your Story</span>
-              </button>
-              {stories.map((story) => (
-                <button key={story.id} className="flex flex-col items-center gap-1 shrink-0">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 p-0.5">
-                    <div className="w-full h-full rounded-full bg-[#020617] flex items-center justify-center text-xs font-bold">
-                      {story.profiles?.display_name?.charAt(0) || "U"}
-                    </div>
-                  </div>
-                  <span className="text-xs text-gray-400 truncate max-w-[64px]">{story.profiles?.display_name || "User"}</span>
-                </button>
-              ))}            </div>
-          </div>
-
-          {/* Posts Feed */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {posts.length === 0 ? (
               <div className="text-center py-20 text-gray-500">
@@ -305,9 +292,7 @@ export function GChatApp() {
             ) : (
               posts.map((post) => (
                 <div key={post.id} className="bg-white/5 border border-white/5 rounded-2xl overflow-hidden">
-                  {/* Post Header */}
-                  <div className="flex items-center justify-between p-3">
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between p-3">                    <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold">
                         {post.profiles?.display_name?.charAt(0) || "U"}
                       </div>
@@ -316,32 +301,30 @@ export function GChatApp() {
                         <p className="text-xs text-gray-500">{format(new Date(post.created_at), "MMM d, HH:mm")}</p>
                       </div>
                     </div>
-                    <button className="p-2 rounded-full hover:bg-white/5 text-gray-400"><MoreHorizontal className="h-4 w-4" /></button>
                   </div>
 
-                  {/* Post Content */}
                   {post.content && <p className="px-3 pb-2 text-sm text-gray-200">{post.content}</p>}
                   {post.media_url && <img src={post.media_url} alt="Post" className="w-full max-h-96 object-cover" />}
 
-                  {/* Post Actions */}
                   <div className="p-3 flex items-center gap-4 border-t border-white/5">
                     <button 
                       onClick={() => handleLikePost(post.id)}
                       className={`flex items-center gap-2 ${post.is_liked ? 'text-red-500' : 'text-gray-400'}`}
                     >
                       <Heart className={`h-5 w-5 ${post.is_liked ? 'fill-current' : ''}`} />
-                      <span className="text-sm">{post.likes_count || 0}</span>
+                      <span className="text-sm">Like</span>
                     </button>
                     <button className="flex items-center gap-2 text-gray-400">
                       <MessageSquare className="h-5 w-5" />
-                      <span className="text-sm">{post.comments_count || 0}</span>
+                      <span className="text-sm">Comment</span>
                     </button>
                   </div>
                 </div>
               ))
             )}
           </div>
-        </div>      )}
+        </div>
+      )}
 
       {/* WALLET VIEW */}
       {view === "wallet" && (
@@ -358,8 +341,7 @@ export function GChatApp() {
               <button className="flex-1 py-2.5 rounded-xl bg-white/20 backdrop-blur text-white font-medium text-sm">Add Money</button>
               <button className="flex-1 py-2.5 rounded-xl bg-white/20 backdrop-blur text-white font-medium text-sm">Withdraw</button>
             </div>
-          </div>
-          <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><PlayCircle className="h-5 w-5 text-yellow-400" /> G-Rewards</h3>
+          </div>          <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><PlayCircle className="h-5 w-5 text-yellow-400" /> G-Rewards</h3>
           <div className="space-y-3 mb-8">
             {availableAds.length === 0 ? <p className="text-sm text-gray-500">No ads available.</p> :
               availableAds.map((ad) => (
@@ -390,7 +372,8 @@ export function GChatApp() {
               );
             })}
           </div>
-        </div>      )}
+        </div>
+      )}
 
       {/* HOME VIEW */}
       {view === "home" && (
@@ -407,8 +390,7 @@ export function GChatApp() {
             <p className="text-lg font-medium text-purple-400 mb-4">Infinite Possibilities.</p>
           </div>
           <div className="grid grid-cols-2 gap-4 mb-8">
-            <button className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Users className="h-8 w-8 text-purple-400 mb-3" /><h3 className="font-bold">G-Tribe</h3><p className="text-xs text-gray-400">Coming Soon</p></button>
-            <button onClick={() => setView("wallet")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Wallet className="h-8 w-8 text-blue-400 mb-3" /><h3 className="font-bold">G-Pay</h3><p className="text-xs text-gray-400">Wallet & Earn</p></button>
+            <button className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Users className="h-8 w-8 text-purple-400 mb-3" /><h3 className="font-bold">G-Tribe</h3><p className="text-xs text-gray-400">Coming Soon</p></button>            <button onClick={() => setView("wallet")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Wallet className="h-8 w-8 text-blue-400 mb-3" /><h3 className="font-bold">G-Pay</h3><p className="text-xs text-gray-400">Wallet & Earn</p></button>
             <button className="col-span-2 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl flex items-center gap-4"><Smartphone className="h-6 w-6 text-emerald-400" /><div className="text-left"><h3 className="font-bold">G-Chat one</h3><p className="text-xs text-gray-400">Coming Soon</p></div></button>
           </div>
           <div className="flex-1" />
@@ -439,7 +421,8 @@ export function GChatApp() {
                 </button>
               ))
             }
-          </div>        </div>
+          </div>
+        </div>
       )}
 
       {/* CONVERSATION VIEW */}
@@ -456,8 +439,7 @@ export function GChatApp() {
             {messages.map((msg) => {
               const isOwn = msg.user_id === user.id;
               return (
-                <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-3 shadow-lg ${isOwn ? "bg-gradient-to-br from-emerald-600 to-cyan-700 text-white rounded-br-sm" : "bg-white/10 backdrop-blur-md border border-white/10 text-white rounded-bl-sm"}`}>
+                <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>                  <div className={`max-w-[80%] rounded-2xl px-4 py-3 shadow-lg ${isOwn ? "bg-gradient-to-br from-emerald-600 to-cyan-700 text-white rounded-br-sm" : "bg-white/10 backdrop-blur-md border border-white/10 text-white rounded-bl-sm"}`}>
                     {msg.text && <p className="text-[15px] whitespace-pre-wrap">{msg.text}</p>}
                     <div className={`text-[10px] mt-1 flex justify-end ${isOwn ? "text-emerald-100" : "text-gray-400"}`}>{format(new Date(msg.created_at), "HH:mm")}</div>
                   </div>
@@ -481,16 +463,19 @@ export function GChatApp() {
 
       {/* CREATE POST MODAL */}
       {showCreatePost && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-md" onClick={() => setShowCreatePost(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-md" onClick={() => !isPosting && setShowCreatePost(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold">Create Post</h3>
-              <button onClick={() => setShowCreatePost(false)} className="p-2 rounded-full hover:bg-white/5"><X className="h-5 w-5" /></button>
+              <button onClick={() => !isPosting && setShowCreatePost(false)} className="p-2 rounded-full hover:bg-white/5"><X className="h-5 w-5" /></button>
             </div>
             <textarea value={postContent} onChange={(e) => setPostContent(e.target.value)} placeholder="What's on your mind?" className="w-full h-24 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white outline-none mb-4 resize-none" />
-            {postImagePreview && <img src={postImagePreview} alt="Preview" className="w-full h-48 object-cover rounded-xl mb-4" />}            <div className="flex gap-2">
+            {postImagePreview && <img src={postImagePreview} alt="Preview" className="w-full h-48 object-cover rounded-xl mb-4" />}
+            <div className="flex gap-2">
               <button onClick={() => document.getElementById('post-image-input')?.click()} className="flex-1 py-3 rounded-xl bg-white/5 flex items-center justify-center gap-2"><ImageIcon className="h-5 w-5" /> Photo</button>
-              <button onClick={handleCreatePost} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold">Post</button>
+              <button onClick={handleCreatePost} disabled={isPosting} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold disabled:opacity-50">
+                {isPosting ? "Posting..." : "Post"}
+              </button>
             </div>
             <input id="post-image-input" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if(f) { setPostImage(f); setPostImagePreview(URL.createObjectURL(f)); }}} />
           </div>
@@ -503,8 +488,7 @@ export function GChatApp() {
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">Send Money</h3>
             <p className="text-sm text-gray-400 mb-4">Balance: ${(walletBalance / 100).toFixed(2)}</p>
-            <input type="number" value={sendAmount} onChange={(e) => setSendAmount(e.target.value)} placeholder="Amount (USD)" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-4 outline-none" />
-            <div className="flex gap-2">
+            <input type="number" value={sendAmount} onChange={(e) => setSendAmount(e.target.value)} placeholder="Amount (USD)" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-4 outline-none" />            <div className="flex gap-2">
               <button onClick={() => setShowSendMoney(false)} className="flex-1 py-3 rounded-xl bg-white/5">Cancel</button>
               <button onClick={handleSendMoney} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold">Send</button>
             </div>
