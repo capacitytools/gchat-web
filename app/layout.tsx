@@ -1,41 +1,33 @@
 import type { Metadata, Viewport } from "next";
-import type { ReactNode } from "react";
-import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
-
-const poppins = Poppins({
-  subsets: ["latin"],
-  weight: ["600"],
-  variable: "--font-poppins",
-});
+export const viewport: Viewport = {
+  themeColor: "#020617",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
 
 export const metadata: Metadata = {
   title: "G-Chat Messenger",
-  description:
-    "Private messaging, Business OS, wallet, AI, and creator monetization.",
-  manifest: "/manifest.webmanifest",
-  icons: {
-    icon: "/icon.svg",
+  description: "One World. One App. Chat Smarter. Live Better. Earn Together.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "G-Chat",
   },
 };
 
-export const viewport: Viewport = {
-  themeColor: "#16A34A",
-  width: "device-width",
-  initialScale: 1,
-};
-
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en" className={`${inter.variable} ${poppins.variable}`}>
-      <body className="bg-gbackground font-body text-gtext antialiased dark:bg-gdark-background dark:text-gdark-text">
-        {children}
-      </body>
+    <html lang="en">
+      <body className="antialiased bg-[#020617] text-white">{children}</body>
     </html>
   );
 }
