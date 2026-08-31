@@ -1,21 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { 
-  ArrowLeft, MessageCircle, Users, Wallet, Send, LogOut, 
-  Loader2, Paperclip, Plus, Phone, Video, CreditCard, TrendingUp, 
-  ArrowDownLeft, ArrowUpRight, Sparkles, PlayCircle, CheckCircle2,
-  Heart, MessageSquare, Image as ImageIcon, X, MoreHorizontal,
-  Users2, Building2, Settings, BarChart3, MessageCircleReply, Banknote,
-  User, Mail, MapPin, PhoneCall, Edit3, Eye, Calendar, Clock,
-  Shield, Bell, Palette, Bot, Trash2, Save, Camera, Award,
-  Zap, Lock, Globe, Link2, Instagram, Twitter, Search
-} from "lucide-react";
+import { Loader2, PlayCircle, CheckCircle2, X, Sparkles, Image as ImageIcon, Search } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
 import imageCompression from "browser-image-compression";
 import { GChatBackground } from "./GChatBackground";
+
+// Import all views
+import { HomeView } from "./views/HomeView";
+import { ChatsListView } from "./views/ChatsListView";
+import { ConversationView } from "./views/ConversationView";
+import { FeedView } from "./views/FeedView";
+import { WalletView } from "./views/WalletView";
+import { ProfileView } from "./views/ProfileView";
+import { EditProfileView } from "./views/EditProfileView";
+import { AnalyticsView } from "./views/AnalyticsView";
+import { SettingsView } from "./views/SettingsView";
+import { GTribeView } from "./views/GTribeView";
+import { GChatOneView } from "./views/GChatOneView";
 
 // Types
 type Message = { id: string; chat_id: string; user_id: string; text: string; media_url: string | null; created_at: string; status: string; };
@@ -45,12 +48,11 @@ export function GChatApp() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showSendMoney, setShowSendMoney] = useState(false);
   const [sendAmount, setSendAmount] = useState("");
-
   const [availableAds, setAvailableAds] = useState<AdCampaign[]>([]);
-  const [watchingAd, setWatchingAd] = useState<AdCampaign | null>(null);  const [adProgress, setAdProgress] = useState(0);
+  const [watchingAd, setWatchingAd] = useState<AdCampaign | null>(null);
+  const [adProgress, setAdProgress] = useState(0);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
 
-  // Feed States
   const [posts, setPosts] = useState<Post[]>([]);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [postContent, setPostContent] = useState("");
@@ -58,20 +60,17 @@ export function GChatApp() {
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
   const [isPosting, setIsPosting] = useState(false);
 
-  // G-Tribe States
   const [groups, setGroups] = useState<Group[]>([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupDesc, setNewGroupDesc] = useState("");
 
-  // G-Chat One States
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [showBusinessSetup, setShowBusinessSetup] = useState(false);
   const [businessName, setBusinessName] = useState("");
   const [businessCategory, setBusinessCategory] = useState("");
   const [autoReply, setAutoReply] = useState("");
 
-  // Payout States
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [bankName, setBankName] = useState("");
@@ -79,9 +78,7 @@ export function GChatApp() {
   const [accountName, setAccountName] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  // Profile States
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [showEditProfile, setShowEditProfile] = useState(false);
   const [editForm, setEditForm] = useState({
     display_name: "", username: "", bio: "", email: "", phone: "", 
     whatsapp: "", address: "", instagram: "", twitter: "", website: ""
@@ -90,25 +87,22 @@ export function GChatApp() {
   const [profileCover, setProfileCover] = useState<File | null>(null);
   const [profileAvatarPreview, setProfileAvatarPreview] = useState<string | null>(null);
   const [profileCoverPreview, setProfileCoverPreview] = useState<string | null>(null);
-  const [viewingProfile, setViewingProfile] = useState<UserProfile | null>(null);
 
-  // New Chat Modal
   const [showNewChat, setShowNewChat] = useState(false);
   const [searchUsername, setSearchUsername] = useState("");
   const [searchResult, setSearchResult] = useState<any>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // --- AUTH & DATA ---
+  // Auth
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) router.push("/auth");
-      else setUser(session.user);
+      if (!session) router.push("/auth");      else setUser(session.user);
       setLoading(false);
     };
     checkUser();
   }, [router]);
 
+  // Data fetching
   useEffect(() => { 
     if (user) {
       if (view !== "home") fetchChats();
@@ -120,6 +114,7 @@ export function GChatApp() {
     }
   }, [user, view]);
 
+  // Realtime messages
   useEffect(() => {
     if (activeChatId) {
       fetchMessages(activeChatId);
@@ -128,12 +123,6 @@ export function GChatApp() {
       };
     }
   }, [activeChatId]);
-
-  useEffect(() => {
-    if (activeChatId && messages.length > 0) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages]);
 
   const fetchChats = async () => {
     if (!user) return;
@@ -144,12 +133,11 @@ export function GChatApp() {
   const fetchMessages = async (chatId: string) => {
     const { data } = await supabase.from("messages").select("*").eq("chat_id", chatId).order("created_at", { ascending: true });
     if (data) {
-      // Remove duplicates by ID
-      const uniqueMessages = data.filter((msg: any, index: number, self: any[]) =>         index === self.findIndex(m => m.id === msg.id)
+      const uniqueMessages = data.filter((msg: any, index: number, self: any[]) => 
+        index === self.findIndex(m => m.id === msg.id)
       );
       setMessages(uniqueMessages);
       
-      // Subscribe to realtime
       const channel = supabase.channel(`chat:${chatId}`)
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` }, (payload) => {
           const newMsg = payload.new as Message;
@@ -157,12 +145,9 @@ export function GChatApp() {
             if (prev.some(m => m.id === newMsg.id)) return prev;
             return [...prev, { ...newMsg, status: "delivered" }];
           });
-        })
-        .subscribe();
+        })        .subscribe();
       
-      return () => {
-        supabase.removeChannel(channel);
-      };
+      return () => { supabase.removeChannel(channel); };
     }
   };
 
@@ -194,7 +179,8 @@ export function GChatApp() {
     if (data) setGroups(data);
   };
 
-  const fetchBusinessProfile = async () => {    if (!user) return;
+  const fetchBusinessProfile = async () => {
+    if (!user) return;
     const { data } = await supabase.from("business_profiles").select("*").eq("user_id", user.id).single();
     if (data) setBusinessProfile(data);
   };
@@ -208,8 +194,7 @@ export function GChatApp() {
         display_name: data.display_name || "",
         username: data.username || "",
         bio: data.bio || "",
-        email: data.email || "",
-        phone: data.phone || "",
+        email: data.email || "",        phone: data.phone || "",
         whatsapp: data.whatsapp || "",
         address: data.address || "",
         instagram: data.instagram || "",
@@ -243,6 +228,7 @@ export function GChatApp() {
     setSendAmount("");
     fetchWalletData();
   };
+
   const handleWithdraw = async () => {
     const amount = parseInt(withdrawAmount) * 100;
     if (!amount || amount <= 0 || amount > walletBalance) { alert("Invalid amount or insufficient balance."); return; }
@@ -257,8 +243,7 @@ export function GChatApp() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error);
       alert("Withdrawal request submitted successfully!");
-      setShowWithdraw(false);
-      setWithdrawAmount(""); setBankName(""); setAccountNumber(""); setAccountName("");
+      setShowWithdraw(false);      setWithdrawAmount(""); setBankName(""); setAccountNumber(""); setAccountName("");
       fetchWalletData();
     } catch (err: any) { alert("Withdrawal failed: " + err.message); }
     finally { setIsWithdrawing(false); }
@@ -292,24 +277,21 @@ export function GChatApp() {
 
       const { error } = await supabase.from("profiles").update({
         ...editForm,
-        avatar_url: avatarUrl,        cover_url: coverUrl,
+        avatar_url: avatarUrl,
+        cover_url: coverUrl,
         updated_at: new Date().toISOString()
       }).eq("id", user.id);
 
       if (error) throw error;
-      
-      setShowEditProfile(false);
+      setView("profile");
       setProfileAvatar(null);
       setProfileCover(null);
       setProfileAvatarPreview(null);
       setProfileCoverPreview(null);
       fetchProfile();
       alert("Profile updated successfully!");
-    } catch (err: any) { 
-      alert("Failed to update profile: " + err.message); 
-    }
+    } catch (err: any) { alert("Failed to update profile: " + err.message); }
   };
-
   const handleSetupBusiness = async () => {
     if (!businessName.trim()) return;
     try {
@@ -341,7 +323,8 @@ export function GChatApp() {
     try {
       const { error } = await supabase.rpc('claim_ad_reward', { target_campaign_id: adId });
       if (error) throw error;
-      setWalletBalance(prev => prev + (watchingAd?.reward_amount || 0));      setTimeout(() => {
+      setWalletBalance(prev => prev + (watchingAd?.reward_amount || 0));
+      setTimeout(() => {
         setWatchingAd(null);
         alert(`✅ You earned $${((watchingAd?.reward_amount || 0) / 100).toFixed(2)}!`);
         fetchWalletData();
@@ -351,15 +334,14 @@ export function GChatApp() {
 
   const generateAISummary = () => {
     setAiSummary("🤖 AI is analyzing your chat...");
-    setTimeout(() => { setAiSummary(`🤖 AI Summary: You exchanged ${messages.length} messages. The conversation is active and healthy.`); }, 1500);
+    setTimeout(() => { setAiSummary(` AI Summary: You exchanged ${messages.length} messages.`); }, 1500);
   };
 
   const handleCreatePost = async () => {
     if (!postContent.trim() && !postImage) return;
     setIsPosting(true);
     let mediaUrl = null;
-    try {
-      if (postImage) {
+    try {      if (postImage) {
         const compressedFile = await imageCompression(postImage, { maxSizeMB: 2, maxWidthOrHeight: 1920, useWebWorker: true });
         const fileName = `${user.id}/posts/${Date.now()}.${compressedFile.name.split('.').pop()}`;
         const { data: uploadData } = await supabase.storage.from("messages").upload(fileName, compressedFile);
@@ -390,7 +372,8 @@ export function GChatApp() {
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) return;
     try {
-      const { data } = await supabase.from("groups").insert({        name: newGroupName, description: newGroupDesc, owner_id: user.id, group_type: "group"
+      const { data } = await supabase.from("groups").insert({
+        name: newGroupName, description: newGroupDesc, owner_id: user.id, group_type: "group"
       }).select().single();
       if (data) {
         await supabase.from("group_members").insert({ group_id: data.id, user_id: user.id, role: "owner" });
@@ -407,8 +390,7 @@ export function GChatApp() {
   };
 
   const handleCreateChat = async (targetUserId: string) => {
-    try {
-      const { data: chat } = await supabase
+    try {      const { data: chat } = await supabase
         .from("chats")
         .insert({ name: `Chat with ${searchResult.display_name}`, created_by: user.id })
         .select()
@@ -419,20 +401,16 @@ export function GChatApp() {
           { chat_id: chat.id, user_id: user.id, role: "owner" },
           { chat_id: chat.id, user_id: targetUserId, role: "member" }
         ]);
-        
         setShowNewChat(false);
         setSearchUsername("");
         setSearchResult(null);
         fetchChats();
         alert("Chat created successfully!");
       }
-    } catch (err: any) {
-      alert("Failed to create chat: " + err.message);
-    }
+    } catch (err: any) { alert("Failed to create chat: " + err.message); }
   };
 
   const openChat = (chat: Chat) => { setActiveChatId(chat.id); setActiveChatName(chat.name); setView("conversation"); setAiSummary(null); };
-  const openProfile = (profileData: UserProfile) => { setViewingProfile(profileData); };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#020617]"><Loader2 className="h-8 w-8 animate-spin text-cyan-400" /></div>;
   if (!user) return null;
@@ -440,430 +418,44 @@ export function GChatApp() {
   return (
     <div className="relative min-h-screen w-full max-w-md mx-auto text-white overflow-hidden font-sans">
       <GChatBackground />
-      {/* PROFILE VIEW */}
-      {view === "profile" && profile && (
-        <div className="relative z-10 flex flex-col min-h-screen pb-24">
-          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
-            <h1 className="text-xl font-bold">My Profile</h1>
-            <button onClick={() => setShowEditProfile(true)} className="p-2 rounded-full bg-emerald-500/20 text-emerald-400"><Edit3 className="h-5 w-5" /></button>
-          </header>
-          <div className="flex-1 overflow-y-auto">
-            <div className="relative h-48 bg-gradient-to-r from-cyan-600 to-purple-700">
-              {profile.cover_url && <img src={profile.cover_url} className="w-full h-full object-cover" />}
-            </div>
-            
-            <div className="relative px-6 pb-6">
-              <div className="absolute -top-16 left-6">
-                <div className="w-32 h-32 rounded-full bg-white/20 backdrop-blur border-4 border-[#020617] flex items-center justify-center overflow-hidden">
-                  {profile.avatar_url ? <img src={profile.avatar_url} className="w-full h-full object-cover" /> : <User className="h-16 w-16" />}
-                </div>
-              </div>
-              
-              <div className="mt-20">
-                <h2 className="text-2xl font-bold">{profile.display_name || "User"}</h2>
-                <p className="text-sm text-cyan-400">@{profile.username || "username"}</p>
-                {profile.badges && profile.badges.length > 0 && (
-                  <div className="flex gap-2 mt-2">
-                    {profile.badges.map((badge, i) => <span key={i} className="px-2 py-1 rounded-full bg-white/20 text-xs flex items-center gap-1"><Award className="h-3 w-3" />{badge}</span>)}
-                  </div>
-                )}
-                <p className="text-sm mt-3 text-gray-300">{profile.bio || "No bio yet"}</p>
-              </div>
 
-              <div className="grid grid-cols-3 gap-3 mt-6">
-                <div className="p-3 rounded-2xl bg-white/5 border border-white/5 text-center">
-                  <Eye className="h-5 w-5 text-cyan-400 mx-auto mb-1" />
-                  <p className="text-lg font-bold">{profile.profile_views || 0}</p>
-                  <p className="text-xs text-gray-400">Views</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-white/5 border border-white/5 text-center">
-                  <MessageSquare className="h-5 w-5 text-purple-400 mx-auto mb-1" />
-                  <p className="text-lg font-bold">{profile.posts_count || 0}</p>
-                  <p className="text-xs text-gray-400">Posts</p>
-                </div>
-                <div className="p-3 rounded-2xl bg-white/5 border border-white/5 text-center">
-                  <Send className="h-5 w-5 text-emerald-400 mx-auto mb-1" />
-                  <p className="text-lg font-bold">{profile.messages_sent || 0}</p>
-                  <p className="text-xs text-gray-400">Messages</p>
-                </div>
-              </div>
-
-              <div className="space-y-3 mt-6">                <h3 className="text-lg font-bold mb-2">Contact Details</h3>
-                {profile.email && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><Mail className="h-5 w-5 text-blue-400" /><div><p className="text-xs text-gray-400">Email</p><p className="text-sm">{profile.email}</p></div></div>}
-                {profile.phone && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><PhoneCall className="h-5 w-5 text-green-400" /><div><p className="text-xs text-gray-400">Phone</p><p className="text-sm">{profile.phone}</p></div></div>}
-                {profile.whatsapp && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><PhoneCall className="h-5 w-5 text-emerald-400" /><div><p className="text-xs text-gray-400">WhatsApp</p><p className="text-sm">{profile.whatsapp}</p></div></div>}
-                {profile.address && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><MapPin className="h-5 w-5 text-red-400" /><div><p className="text-xs text-gray-400">Address</p><p className="text-sm">{profile.address}</p></div></div>}
-              </div>
-
-              {(profile.instagram || profile.twitter || profile.website) && (
-                <div className="space-y-3 mt-6">
-                  <h3 className="text-lg font-bold mb-2">Social Links</h3>
-                  {profile.instagram && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><Instagram className="h-5 w-5 text-pink-400" /><p className="text-sm">{profile.instagram}</p></div>}
-                  {profile.twitter && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><Twitter className="h-5 w-5 text-blue-400" /><p className="text-sm">{profile.twitter}</p></div>}
-                  {profile.website && <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5"><Globe className="h-5 w-5 text-cyan-400" /><p className="text-sm">{profile.website}</p></div>}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3 mt-6">
-                <button onClick={() => setView("analytics")} className="p-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-left">
-                  <BarChart3 className="h-6 w-6 text-purple-400 mb-2" />
-                  <p className="font-bold text-sm">Analytics</p>
-                  <p className="text-xs text-gray-400">View your stats</p>
-                </button>
-                <button onClick={() => setView("settings")} className="p-4 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-left">
-                  <Settings className="h-6 w-6 text-cyan-400 mb-2" />
-                  <p className="font-bold text-sm">Settings</p>
-                  <p className="text-xs text-gray-400">Privacy & more</p>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT PROFILE VIEW */}
-      {view === "edit-profile" && (
-        <div className="relative z-10 flex flex-col min-h-screen pb-24">
-          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
-            <button onClick={() => setView("profile")} className="p-2 rounded-full bg-white/5"><ArrowLeft className="h-5 w-5" /></button>
-            <h1 className="text-xl font-bold">Edit Profile</h1>
-            <button onClick={handleSaveProfile} className="p-2 rounded-full bg-emerald-500/20 text-emerald-400"><Save className="h-5 w-5" /></button>
-          </header>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Cover Image</label>
-              <div className="relative h-32 rounded-xl bg-white/5 border-2 border-dashed border-white/30 flex items-center justify-center overflow-hidden">
-                {profileCoverPreview ? (
-                  <img src={profileCoverPreview} className="w-full h-full object-cover" />
-                ) : profile?.cover_url ? (
-                  <img src={profile.cover_url} className="w-full h-full object-cover" />
-                ) : (                  <Camera className="h-8 w-8 text-gray-400" />
-                )}
-              </div>
-              <button onClick={() => document.getElementById('cover-input')?.click()} className="text-sm text-cyan-400 mt-2">Change Cover</button>
-              <input id="cover-input" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if(f) { setProfileCover(f); setProfileCoverPreview(URL.createObjectURL(f)); }}} />
-            </div>
-
-            <div className="text-center">
-              <div className="w-24 h-24 rounded-full bg-white/10 border-2 border-dashed border-white/30 mx-auto mb-2 flex items-center justify-center overflow-hidden">
-                {profileAvatarPreview ? <img src={profileAvatarPreview} className="w-full h-full object-cover" /> : profile?.avatar_url ? <img src={profile.avatar_url} className="w-full h-full object-cover" /> : <Camera className="h-8 w-8 text-gray-400" />}
-              </div>
-              <button onClick={() => document.getElementById('avatar-input')?.click()} className="text-sm text-cyan-400">Change Avatar</button>
-              <input id="avatar-input" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if(f) { setProfileAvatar(f); setProfileAvatarPreview(URL.createObjectURL(f)); }}} />
-            </div>
-
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Display Name</label>
-              <input value={editForm.display_name} onChange={(e) => setEditForm({...editForm, display_name: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Username</label>
-              <input value={editForm.username} onChange={(e) => setEditForm({...editForm, username: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Bio</label>
-              <textarea value={editForm.bio} onChange={(e) => setEditForm({...editForm, bio: e.target.value})} className="w-full h-20 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white resize-none" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Email</label>
-              <input value={editForm.email} onChange={(e) => setEditForm({...editForm, email: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Phone Number</label>
-              <input value={editForm.phone} onChange={(e) => setEditForm({...editForm, phone: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">WhatsApp Number</label>
-              <input value={editForm.whatsapp} onChange={(e) => setEditForm({...editForm, whatsapp: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Address</label>
-              <input value={editForm.address} onChange={(e) => setEditForm({...editForm, address: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Instagram</label>
-              <input value={editForm.instagram} onChange={(e) => setEditForm({...editForm, instagram: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Twitter/X</label>
-              <input value={editForm.twitter} onChange={(e) => setEditForm({...editForm, twitter: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />            </div>
-            <div>
-              <label className="text-xs text-gray-400 mb-1 block">Website</label>
-              <input value={editForm.website} onChange={(e) => setEditForm({...editForm, website: e.target.value})} className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" />
-            </div>
-            <button onClick={handleSaveProfile} className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold">Save Profile</button>
-          </div>
-        </div>
-      )}
-
-      {/* ANALYTICS VIEW */}
-      {view === "analytics" && profile && (
-        <div className="relative z-10 flex flex-col min-h-screen pb-24">
-          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center gap-3">
-            <button onClick={() => setView("profile")} className="p-2 rounded-full bg-white/5"><ArrowLeft className="h-5 w-5" /></button>
-            <h1 className="text-xl font-bold">Analytics</h1>
-          </header>
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30">
-                <Eye className="h-6 w-6 text-cyan-400 mb-2" />
-                <p className="text-2xl font-bold">{profile.profile_views || 0}</p>
-                <p className="text-xs text-gray-400">Profile Views</p>
-              </div>
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
-                <Heart className="h-6 w-6 text-purple-400 mb-2" />
-                <p className="text-2xl font-bold">{(profile.posts_count || 0) * 3}</p>
-                <p className="text-xs text-gray-400">Total Likes</p>
-              </div>
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-green-500/20 border border-emerald-500/30">
-                <Send className="h-6 w-6 text-emerald-400 mb-2" />
-                <p className="text-2xl font-bold">{profile.messages_sent || 0}</p>
-                <p className="text-xs text-gray-400">Messages Sent</p>
-              </div>
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/30">
-                <Banknote className="h-6 w-6 text-yellow-400 mb-2" />
-                <p className="text-2xl font-bold">${(walletBalance / 100).toFixed(2)}</p>
-                <p className="text-xs text-gray-400">Earned</p>
-              </div>
-            </div>
-            <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
-              <h3 className="font-bold mb-3 flex items-center gap-2"><TrendingUp className="h-5 w-5 text-cyan-400" /> Growth</h3>
-              <div className="space-y-3">
-                <div><div className="flex justify-between text-sm mb-1"><span>Profile Views</span><span className="text-cyan-400">+12%</span></div><div className="h-2 bg-white/10 rounded-full"><div className="h-2 bg-cyan-400 rounded-full" style={{width: '65%'}} /></div></div>
-                <div><div className="flex justify-between text-sm mb-1"><span>Post Engagement</span><span className="text-purple-400">+8%</span></div><div className="h-2 bg-white/10 rounded-full"><div className="h-2 bg-purple-400 rounded-full" style={{width: '45%'}} /></div></div>
-                <div><div className="flex justify-between text-sm mb-1"><span>Message Activity</span><span className="text-emerald-400">+23%</span></div><div className="h-2 bg-white/10 rounded-full"><div className="h-2 bg-emerald-400 rounded-full" style={{width: '78%'}} /></div></div>
-              </div>
-            </div>
-          </div>
-        </div>      )}
-
-      {/* SETTINGS VIEW */}
-      {view === "settings" && (
-        <div className="relative z-10 flex flex-col min-h-screen pb-24">
-          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center gap-3">
-            <button onClick={() => setView("profile")} className="p-2 rounded-full bg-white/5"><ArrowLeft className="h-5 w-5" /></button>
-            <h1 className="text-xl font-bold">Settings</h1>
-          </header>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            <button className="w-full flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 text-left"><Shield className="h-5 w-5 text-cyan-400" /><div className="flex-1"><p className="font-medium">Privacy</p><p className="text-xs text-gray-400">Read receipts, online status</p></div></button>
-            <button className="w-full flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 text-left"><Bell className="h-5 w-5 text-purple-400" /><div className="flex-1"><p className="font-medium">Notifications</p><p className="text-xs text-gray-400">Messages, calls, rewards</p></div></button>
-            <button className="w-full flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 text-left"><Palette className="h-5 w-5 text-pink-400" /><div className="flex-1"><p className="font-medium">Appearance</p><p className="text-xs text-gray-400">Themes, chat colors</p></div></button>
-            <button className="w-full flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 text-left"><Bot className="h-5 w-5 text-emerald-400" /><div className="flex-1"><p className="font-medium">AI Assistant</p><p className="text-xs text-gray-400">Smart replies, summaries</p></div></button>
-            <button className="w-full flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 text-left"><Lock className="h-5 w-5 text-yellow-400" /><div className="flex-1"><p className="font-medium">Security</p><p className="text-xs text-gray-400">2FA, secret chats</p></div></button>
-            <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center gap-3 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-left mt-6"><LogOut className="h-5 w-5 text-red-400" /><div className="flex-1"><p className="font-medium text-red-400">Logout</p></div></button>
-          </div>
-        </div>
-      )}
-
-      {/* FEED VIEW */}
-      {view === "feed" && (
-        <div className="relative z-10 flex flex-col min-h-screen pb-24">
-          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
-            <h1 className="text-xl font-bold">G-Feed</h1>
-            <button onClick={() => setShowCreatePost(true)} className="p-2 rounded-full bg-emerald-500/20 text-emerald-400"><Plus className="h-5 w-5" /></button>
-          </header>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {posts.length === 0 ? (
-              <div className="text-center py-20 text-gray-500">
-                <ImageIcon className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                <p>No posts yet. Be the first to share!</p>
-              </div>
-            ) : posts.map((post) => (
-              <div key={post.id} className="bg-white/5 border border-white/5 rounded-2xl overflow-hidden">
-                <div className="flex items-center justify-between p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold">{post.profiles?.display_name?.charAt(0) || "U"}</div>
-                    <div><p className="font-medium text-white text-sm">{post.profiles?.display_name || "User"}</p><p className="text-xs text-gray-500">{format(new Date(post.created_at), "MMM d, HH:mm")}</p></div>
-                  </div>
-                </div>
-                {post.content && <p className="px-3 pb-2 text-sm text-gray-200">{post.content}</p>}
-                {post.media_url && <img src={post.media_url} alt="Post" className="w-full max-h-96 object-cover" />}
-                <div className="p-3 flex items-center gap-4 border-t border-white/5">
-                  <button onClick={() => handleLikePost(post.id)} className={`flex items-center gap-2 ${post.is_liked ? 'text-red-500' : 'text-gray-400'}`}>
-                    <Heart className={`h-5 w-5 ${post.is_liked ? 'fill-current' : ''}`} /><span className="text-sm">{post.likes_count || 0}</span>
-                  </button>
-                  <button className="flex items-center gap-2 text-gray-400"><MessageSquare className="h-5 w-5" /><span className="text-sm">Comment</span></button>
-                </div>
-              </div>            ))}
-          </div>
-        </div>
-      )}
-
-      {/* G-TRIBE VIEW */}
-      {view === "gtribe" && (
-        <div className="relative z-10 flex flex-col min-h-screen pb-24">
-          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
-            <h1 className="text-xl font-bold">G-Tribe</h1>
-            <button onClick={() => setShowCreateGroup(true)} className="p-2 rounded-full bg-emerald-500/20 text-emerald-400"><Plus className="h-5 w-5" /></button>
-          </header>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {groups.length === 0 ? (
-              <div className="text-center py-20 text-gray-500">
-                <Users2 className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                <p>No groups yet. Create one!</p>
-              </div>
-            ) : groups.map((group) => (
-              <button key={group.id} className="w-full p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 text-left">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center font-bold">{group.name.charAt(0).toUpperCase()}</div>
-                  <div className="flex-1"><h3 className="font-bold text-white">{group.name}</h3><p className="text-xs text-gray-400">{group.member_count} members • {group.group_type}</p></div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* G-CHAT ONE VIEW */}
-      {view === "gchatone" && (
-        <div className="relative z-10 flex flex-col min-h-screen pb-24">
-          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between">
-            <h1 className="text-xl font-bold">G-Chat One</h1>
-            {!businessProfile && <button onClick={() => setShowBusinessSetup(true)} className="p-2 rounded-full bg-emerald-500/20 text-emerald-400"><Plus className="h-5 w-5" /></button>}
-          </header>
-          <div className="flex-1 overflow-y-auto p-4">
-            {!businessProfile ? (
-              <div className="text-center py-20">
-                <Building2 className="h-16 w-16 mx-auto mb-4 text-emerald-400" />
-                <h2 className="text-xl font-bold mb-2">Turn Your Chat Into Business</h2>
-                <p className="text-sm text-gray-400 mb-6">Get AI Auto-Reply, Analytics, and Customer Management.</p>
-                <button onClick={() => setShowBusinessSetup(true)} className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold">Setup Business</button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-600 to-cyan-700">
-                  <h2 className="text-xl font-bold">{businessProfile.business_name}</h2>
-                  <p className="text-sm text-emerald-100">{businessProfile.category}</p>                  {businessProfile.is_verified && <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 rounded bg-white/20 text-xs"><CheckCircle2 className="h-3 w-3" /> Verified</span>}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <button className="p-4 rounded-xl bg-white/5 border border-white/5 text-left"><BarChart3 className="h-6 w-6 text-cyan-400 mb-2" /><p className="text-sm font-medium">Analytics</p></button>
-                  <button className="p-4 rounded-xl bg-white/5 border border-white/5 text-left"><MessageCircleReply className="h-6 w-6 text-purple-400 mb-2" /><p className="text-sm font-medium">AI Auto-Reply {businessProfile.auto_reply_enabled ? '✅' : '❌'}</p></button>
-                  <button className="p-4 rounded-xl bg-white/5 border border-white/5 text-left"><Users2 className="h-6 w-6 text-pink-400 mb-2" /><p className="text-sm font-medium">Customers</p></button>
-                  <button className="p-4 rounded-xl bg-white/5 border border-white/5 text-left"><Settings className="h-6 w-6 text-orange-400 mb-2" /><p className="text-sm font-medium">Settings</p></button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* WALLET VIEW */}
-      {view === "wallet" && (
-        <div className="relative z-10 flex flex-col min-h-screen p-6 pb-24">
-          <header className="flex justify-between items-center mb-8">
-            <button onClick={() => setView("home")} className="p-2 rounded-full bg-white/5"><ArrowLeft className="h-5 w-5" /></button>
-            <h1 className="text-xl font-bold">G-Pay Wallet</h1>
-            <div className="w-9" />
-          </header>
-          <div className="relative p-6 rounded-3xl bg-gradient-to-br from-emerald-600 to-cyan-700 shadow-2xl shadow-emerald-500/20 mb-8">
-            <p className="text-emerald-100 text-sm mb-1">Total Balance</p>
-            <h2 className="text-4xl font-bold text-white mb-6">${(walletBalance / 100).toFixed(2)}</h2>
-            <div className="flex gap-3">
-              <button className="flex-1 py-2.5 rounded-xl bg-white/20 backdrop-blur text-white font-medium text-sm">Add Money</button>
-              <button onClick={() => setShowWithdraw(true)} className="flex-1 py-2.5 rounded-xl bg-white/20 backdrop-blur text-white font-medium text-sm flex items-center justify-center gap-2"><Banknote className="h-4 w-4" /> Withdraw</button>
-            </div>
-          </div>
-          <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><PlayCircle className="h-5 w-5 text-yellow-400" /> G-Rewards</h3>
-          <div className="space-y-3 mb-8">
-            {availableAds.map((ad) => (
-              <button key={ad.id} onClick={() => startWatchingAd(ad)} className="w-full flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-full bg-yellow-500/20 text-yellow-400"><PlayCircle className="h-5 w-5" /></div>
-                  <div className="text-left"><p className="font-bold text-white text-sm">{ad.title}</p><p className="text-xs text-gray-400">Watch 3s to earn</p></div>
-                </div>
-                <span className="font-bold text-yellow-400">+${(ad.reward_amount / 100).toFixed(2)}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* HOME VIEW */}
-      {view === "home" && (
-        <div className="relative z-10 flex flex-col min-h-screen p-6 pb-24">
-          <div className="flex justify-between items-center mb-8">
-            <div className="flex items-center gap-2">              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center font-bold text-black text-xl">G</div>
-              <span className="font-bold text-lg">G-Chat</span>
-            </div>
-            <button onClick={() => setView("profile")} className="p-2 rounded-full bg-white/5"><User className="h-5 w-5 text-gray-400" /></button>
-          </div>
-          <div className="text-center mb-10 mt-4">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-cyan-200 to-emerald-300 bg-clip-text text-transparent mb-2">One World. One App.</h1>
-            <p className="text-lg font-medium text-purple-400 mb-4">Infinite Possibilities.</p>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-8">
-            <button onClick={() => setView("gtribe")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Users2 className="h-8 w-8 text-purple-400 mb-3" /><h3 className="font-bold">G-Tribe</h3><p className="text-xs text-gray-400">Groups & Communities</p></button>
-            <button onClick={() => setView("wallet")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Wallet className="h-8 w-8 text-blue-400 mb-3" /><h3 className="font-bold">G-Pay</h3><p className="text-xs text-gray-400">Wallet & Earn</p></button>
-            <button onClick={() => setView("gchatone")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><Building2 className="h-8 w-8 text-emerald-400 mb-3" /><h3 className="font-bold">G-Chat One</h3><p className="text-xs text-gray-400">Business & AI</p></button>
-            <button onClick={() => setView("feed")} className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl text-left"><ImageIcon className="h-8 w-8 text-orange-400 mb-3" /><h3 className="font-bold">G-Feed</h3><p className="text-xs text-gray-400">Social Posts</p></button>
-          </div>
-          <div className="flex-1" />
-          <button onClick={() => setView("list")} className="w-full p-4 rounded-2xl bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/30 backdrop-blur-xl flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center"><MessageCircle className="h-6 w-6 text-cyan-400" /></div>
-            <div className="flex-1 text-left"><p className="text-white font-medium">Message the world...</p><p className="text-xs text-gray-400">Select a conversation</p></div>
-            <Send className="h-5 w-5 text-cyan-400" />
-          </button>
-        </div>
-      )}
-
-      {/* CHAT LIST VIEW */}
-      {view === "list" && (
-        <div className="relative z-10 flex flex-col min-h-screen pb-24">
-          <header className="sticky top-0 z-20 bg-[#020617]/80 backdrop-blur-xl border-b border-white/5 px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setView("home")} className="p-2 -ml-2 rounded-full hover:bg-white/5"><ArrowLeft className="h-5 w-5" /></button>
-              <h1 className="text-xl font-bold">Chats</h1>
-            </div>
-            <button onClick={() => setShowNewChat(true)} className="p-2 rounded-full bg-emerald-500/20 text-emerald-400"><Plus className="h-5 w-5" /></button>
-          </header>
-          <div className="flex-1 overflow-y-auto p-4 space-y-2">
-            {chats.map((chat) => (
-              <button key={chat.id} onClick={() => openChat(chat)} className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 text-left">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold">{chat.name.charAt(0).toUpperCase()}</div>
-                <div className="flex-1 border-b border-white/5 pb-3"><h3 className="font-medium text-white">{chat.name}</h3><p className="text-xs text-gray-500">Tap to open</p></div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* CONVERSATION VIEW */}
+      {/* Render views based on state */}
+      {view === "home" && <HomeView setView={setView} onLogout={() => supabase.auth.signOut()} />}
+      {view === "list" && <ChatsListView setView={setView} chats={chats} onOpenChat={openChat} onNewChat={() => setShowNewChat(true)} />}
       {view === "conversation" && activeChatId && (
-        <div className="relative z-10 flex flex-col min-h-screen">
-          <header className="sticky top-0 z-20 bg-[#020617]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center gap-3">
-            <button onClick={() => setView("list")} className="p-2 -ml-2 rounded-full hover:bg-white/5"><ArrowLeft className="h-5 w-5" /></button>            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold">{activeChatName.charAt(0).toUpperCase()}</div>
-            <div className="flex-1"><h1 className="font-semibold text-white text-sm">{activeChatName}</h1><p className="text-xs text-emerald-400">Online</p></div>
-            <button onClick={generateAISummary} className="p-2 rounded-full hover:bg-white/5 text-purple-400"><Sparkles className="h-5 w-5" /></button>
-          </header>
-          {aiSummary && <div className="mx-4 mt-4 p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-sm text-purple-200">{aiSummary}</div>}
-          <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
-            {messages.map((msg) => {
-              const isOwn = msg.user_id === user.id;
-              return (
-                <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-3 shadow-lg ${isOwn ? "bg-gradient-to-br from-emerald-600 to-cyan-700 text-white rounded-br-sm" : "bg-white/10 backdrop-blur-md border border-white/10 text-white rounded-bl-sm"}`}>
-                    {msg.text && <p className="text-[15px] whitespace-pre-wrap">{msg.text}</p>}
-                    <div className={`text-[10px] mt-1 flex justify-end ${isOwn ? "text-emerald-100" : "text-gray-400"}`}>{format(new Date(msg.created_at), "HH:mm")}</div>
-                  </div>
-                </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
-          </main>
-          <div className="fixed bottom-16 left-0 right-0 z-30 bg-[#020617]/95 backdrop-blur-xl border-t border-white/10 p-3 max-w-md mx-auto">
-            <div className="flex items-center gap-2">
-              <button onClick={() => setShowSendMoney(true)} className="p-3 rounded-full bg-blue-500/10 text-blue-400 shrink-0"><CreditCard className="h-5 w-5" /></button>
-              <button className="p-3 rounded-full bg-white/5 text-gray-400 shrink-0"><Paperclip className="h-5 w-5" /></button>
-              <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl px-4 py-3">
-                <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendMessage()} placeholder="Type..." className="w-full bg-transparent text-white outline-none" />
-              </div>
-              <button onClick={sendMessage} className="p-3 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white shadow-lg shrink-0"><Send className="h-5 w-5" /></button>
-            </div>
-          </div>
-        </div>
+        <ConversationView
+          setView={setView}
+          activeChatName={activeChatName}
+          messages={messages}
+          userId={user.id}
+          draft={draft}
+          setDraft={setDraft}
+          onSendMessage={sendMessage}
+          onSendMoney={() => setShowSendMoney(true)}
+          onAISummary={generateAISummary}
+          aiSummary={aiSummary}
+        />
       )}
+      {view === "feed" && <FeedView posts={posts} onLikePost={handleLikePost} onCreatePost={() => setShowCreatePost(true)} />}
+      {view === "wallet" && <WalletView setView={setView} balance={walletBalance} ads={availableAds} transactions={transactions} userId={user.id} onWatchAd={startWatchingAd} onWithdraw={() => setShowWithdraw(true)} />}
+      {view === "profile" && profile && <ProfileView profile={profile} setView={setView} onEdit={() => setView("edit-profile")} />}
+      {view === "edit-profile" && (        <EditProfileView
+          setView={setView}
+          editForm={editForm}
+          setEditForm={setEditForm}
+          avatarPreview={profileAvatarPreview}
+          coverPreview={profileCoverPreview}
+          onAvatarChange={(e) => { const f = e.target.files?.[0]; if(f) { setProfileAvatar(f); setProfileAvatarPreview(URL.createObjectURL(f)); }}}
+          onCoverChange={(e) => { const f = e.target.files?.[0]; if(f) { setProfileCover(f); setProfileCoverPreview(URL.createObjectURL(f)); }}}
+          onSave={handleSaveProfile}
+        />
+      )}
+      {view === "analytics" && profile && <AnalyticsView setView={setView} profile={profile} walletBalance={walletBalance} />}
+      {view === "settings" && <SettingsView setView={setView} onLogout={() => supabase.auth.signOut()} />}
+      {view === "gtribe" && <GTribeView groups={groups} onCreateGroup={() => setShowCreateGroup(true)} />}
+      {view === "gchatone" && <GChatOneView businessProfile={businessProfile} onSetupBusiness={() => setShowBusinessSetup(true)} />}
 
-      {/* NEW CHAT MODAL */}
+      {/* Modals */}
       {showNewChat && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setShowNewChat(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-6" onClick={e => e.stopPropagation()}>
@@ -872,15 +464,10 @@ export function GChatApp() {
               <button onClick={() => setShowNewChat(false)} className="p-2 rounded-full hover:bg-white/5"><X className="h-5 w-5" /></button>
             </div>
             <div className="flex gap-2 mb-4">
-              <input 
-                value={searchUsername} 
-                onChange={(e) => setSearchUsername(e.target.value)} 
-                placeholder="Search username..." 
-                className="flex-1 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white"
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchUser()}
-              />
+              <input value={searchUsername} onChange={(e) => setSearchUsername(e.target.value)} placeholder="Search username..." className="flex-1 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" onKeyDown={(e) => e.key === 'Enter' && handleSearchUser()} />
               <button onClick={handleSearchUser} className="p-3 rounded-xl bg-emerald-500/20 text-emerald-400"><Search className="h-5 w-5" /></button>
-            </div>            {searchResult && (
+            </div>
+            {searchResult && (
               <div className="p-4 rounded-xl bg-white/5 border border-white/5 mb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold">{searchResult.display_name?.charAt(0) || "U"}</div>
@@ -896,14 +483,12 @@ export function GChatApp() {
         </div>
       )}
 
-      {/* MODALS */}
       {showWithdraw && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setShowWithdraw(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">Withdraw Funds</h3>
             <p className="text-sm text-gray-400 mb-4">Available: ${(walletBalance / 100).toFixed(2)}</p>
-            <input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} placeholder="Amount (USD)" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-3" />
-            <input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="Bank Name" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-3" />
+            <input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} placeholder="Amount (USD)" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-3" />            <input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="Bank Name" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-3" />
             <input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="Account Number" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-3" />
             <input value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="Account Name" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-4" />
             <div className="flex gap-2">
@@ -929,7 +514,8 @@ export function GChatApp() {
         </div>
       )}
 
-      {showCreateGroup && (        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setShowCreateGroup(false)}>
+      {showCreateGroup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setShowCreateGroup(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">Create Group</h3>
             <input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="Group name" className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white mb-3" />
@@ -951,8 +537,7 @@ export function GChatApp() {
             </div>
             <textarea value={postContent} onChange={(e) => setPostContent(e.target.value)} placeholder="What's on your mind?" className="w-full h-24 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white outline-none mb-4 resize-none" />
             {postImagePreview && <img src={postImagePreview} alt="Preview" className="w-full h-48 object-cover rounded-xl mb-4" />}
-            <div className="flex gap-2">
-              <button onClick={() => document.getElementById('post-image-input')?.click()} className="flex-1 py-3 rounded-xl bg-white/5 flex items-center justify-center gap-2"><ImageIcon className="h-5 w-5" /> Photo</button>
+            <div className="flex gap-2">              <button onClick={() => document.getElementById('post-image-input')?.click()} className="flex-1 py-3 rounded-xl bg-white/5 flex items-center justify-center gap-2"><ImageIcon className="h-5 w-5" /> Photo</button>
               <button onClick={handleCreatePost} disabled={isPosting} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold disabled:opacity-50">{isPosting ? "Posting..." : "Post"}</button>
             </div>
             <input id="post-image-input" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if(f) { setPostImage(f); setPostImagePreview(URL.createObjectURL(f)); }}} />
@@ -978,21 +563,22 @@ export function GChatApp() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-8 text-center">
             <div className="w-20 h-20 rounded-full bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center mx-auto mb-6 animate-pulse"><PlayCircle className="h-10 w-10 text-white" /></div>
-            <h3 className="text-xl font-bold mb-2">{watchingAd.title}</h3>            <div className="w-full bg-white/10 rounded-full h-2 mb-2"><div className="bg-gradient-to-r from-yellow-400 to-orange-500 h-2 rounded-full transition-all duration-300" style={{ width: `${adProgress}%` }} /></div>
+            <h3 className="text-xl font-bold mb-2">{watchingAd.title}</h3>
+            <div className="w-full bg-white/10 rounded-full h-2 mb-2"><div className="bg-gradient-to-r from-yellow-400 to-orange-500 h-2 rounded-full transition-all duration-300" style={{ width: `${adProgress}%` }} /></div>
             <p className="text-xs text-gray-500">Watching... {Math.floor(adProgress / 10)}s / 3s</p>
             {adProgress === 100 && <div className="mt-4 flex items-center justify-center gap-2 text-emerald-400 font-bold"><CheckCircle2 className="h-5 w-5" /> Reward Claimed!</div>}
           </div>
         </div>
       )}
 
-      {/* BOTTOM NAVIGATION - 5 TABS */}
+      {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#020617]/95 backdrop-blur-xl border-t border-white/10 max-w-md mx-auto pb-safe">
         <div className="flex justify-around items-center h-16">
-          <button onClick={() => setView("home")} className={`flex flex-col items-center gap-1 ${view === "home" ? "text-cyan-400" : "text-gray-500"}`}><MessageCircle className="h-5 w-5" /><span className="text-[9px]">Home</span></button>
-          <button onClick={() => setView("list")} className={`flex flex-col items-center gap-1 ${view === "list" || view === "conversation" ? "text-cyan-400" : "text-gray-500"}`}><Users className="h-5 w-5" /><span className="text-[9px]">Chats</span></button>
-          <button onClick={() => setView("feed")} className={`flex flex-col items-center gap-1 ${view === "feed" ? "text-cyan-400" : "text-gray-500"}`}><ImageIcon className="h-5 w-5" /><span className="text-[9px]">Feed</span></button>
-          <button onClick={() => setView("wallet")} className={`flex flex-col items-center gap-1 ${view === "wallet" ? "text-cyan-400" : "text-gray-500"}`}><Wallet className="h-5 w-5" /><span className="text-[9px]">G-Pay</span></button>
-          <button onClick={() => setView("profile")} className={`flex flex-col items-center gap-1 ${view === "profile" || view === "edit-profile" || view === "analytics" || view === "settings" ? "text-cyan-400" : "text-gray-500"}`}><User className="h-5 w-5" /><span className="text-[9px]">Profile</span></button>
+          <button onClick={() => setView("home")} className={`flex flex-col items-center gap-1 ${view === "home" ? "text-cyan-400" : "text-gray-500"}`}><span className="text-lg">🏠</span><span className="text-[9px]">Home</span></button>
+          <button onClick={() => setView("list")} className={`flex flex-col items-center gap-1 ${view === "list" || view === "conversation" ? "text-cyan-400" : "text-gray-500"}`}><span className="text-lg">💬</span><span className="text-[9px]">Chats</span></button>
+          <button onClick={() => setView("feed")} className={`flex flex-col items-center gap-1 ${view === "feed" ? "text-cyan-400" : "text-gray-500"}`}><span className="text-lg">📸</span><span className="text-[9px]">Feed</span></button>
+          <button onClick={() => setView("wallet")} className={`flex flex-col items-center gap-1 ${view === "wallet" ? "text-cyan-400" : "text-gray-500"}`}><span className="text-lg">💰</span><span className="text-[9px]">G-Pay</span></button>
+          <button onClick={() => setView("profile")} className={`flex flex-col items-center gap-1 ${view === "profile" || view === "edit-profile" || view === "analytics" || view === "settings" ? "text-cyan-400" : "text-gray-500"}`}><span className="text-lg">👤</span><span className="text-[9px]">Profile</span></button>
         </div>
       </nav>
     </div>
