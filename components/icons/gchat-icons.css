@@ -1,0 +1,183 @@
+/* ============================================================
+   G-CHAT ANIMATED MENU ICONS — cyber-luxury visual system
+   Pure CSS keyframes (GPU-friendly: only transform + opacity)
+   ============================================================ */
+
+/* ---------- Icon shell (transparent + soft glow) ---------- */
+.gicon-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform .3s cubic-bezier(.34,1.56,.64,1);
+}
+/* Soft glassmorphic glow halo (blur 20px, opacity .15) */
+.gicon-shell::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,240,255,.35), rgba(176,38,255,.15) 60%, transparent 75%);
+  filter: blur(20px);
+  opacity: .15;
+  transition: opacity .35s ease;
+  pointer-events: none;
+}
+.gicon-shell:hover { transform: translateY(-2px) scale(1.06); }
+.gicon-shell:hover::before { opacity: .45; }
+.gicon-shell:active { transform: scale(.94); }
+
+.gicon { width: 48px; height: 48px; display: block; }
+
+/* ---------- Click burst: collapse -> particle shockwave ---------- */
+.gicon-burst { animation: giconBurst .6s ease; }
+@keyframes giconBurst {
+  0% { transform: scale(1); }
+  30% { transform: scale(.82); }
+  60% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+.gicon-burst::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;  animation: burstWave .6s ease-out;
+  pointer-events: none;
+}
+@keyframes burstWave {
+  0% { box-shadow: 0 0 0 0 rgba(0,240,255,.55), 0 0 0 0 rgba(255,45,149,.4); }
+  100% { box-shadow: 0 0 0 20px rgba(0,240,255,0), 0 0 0 32px rgba(255,45,149,0); }
+}
+
+/* ============================================================
+   ICON 1 — G-TRIBE (obsidian ring + 7 orbs + constellation)
+   ============================================================ */
+.tribe-ring { transform-origin: 24px 24px; transform-box: view-box; animation: tribeSpin 120s linear infinite; } /* 3°/s */
+@keyframes tribeSpin { to { transform: rotate(360deg); } }
+
+.tribe-orb { transform-box: fill-box; transform-origin: center; animation: orbPulse 2.4s ease-in-out infinite; }
+@keyframes orbPulse { 0%,100% { opacity:.75; transform: scale(1);} 50% { opacity:1; transform: scale(1.1);} }
+
+.tribe-web line { animation: webFlicker 3s ease-in-out infinite; }
+.tribe-web line:nth-child(2n) { animation-delay: .8s; }
+.tribe-web line:nth-child(3n) { animation-delay: 1.6s; }
+@keyframes webFlicker { 0%,100% { opacity:.2;} 50% { opacity:.7;} }
+
+.tribe-fog { animation: fogDrift 5s ease-in-out infinite; }
+@keyframes fogDrift { 0%,100% { opacity:.18;} 50% { opacity:.4;} }
+
+/* Hover: ring faster, orbs bigger */
+.gicon-shell:hover .tribe-ring { animation-duration: 24s; }
+.gicon-shell:hover .tribe-orb { animation-duration: .9s; }
+
+/* ============================================================
+   ICON 2 — G-PAY (gold/holo diamond + streams + infinity loop)
+   ============================================================ */
+.pay-diamond { transform-origin: 24px 15px; transform-box: view-box; animation: diamondSway 6s ease-in-out infinite; }
+@keyframes diamondSway { 0%,100% { transform: scaleX(1);} 50% { transform: scaleX(.86);} } /* fake Y-axis spin */
+
+.pay-stream { stroke-dasharray: 3 3; animation: streamFlow 1.4s linear infinite; }
+.pay-stream.s2 { animation-delay: .4s; }
+.pay-stream.s3 { animation-delay: .8s; }
+@keyframes streamFlow { to { stroke-dashoffset: -12; } }
+
+.pay-infinity { animation: infFloat 5s ease-in-out infinite; }
+@keyframes infFloat { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-1.4px);} }
+
+/* Currency symbols morph in/out like sprouting seeds */
+.pay-sym { opacity: 0; animation: symMorph 4.5s ease-in-out infinite; }
+.pay-sym.sym-b { animation-delay: 1.5s; }
+.pay-sym.sym-c { animation-delay: 3s; }
+@keyframes symMorph { 0%,100% { opacity:0;} 25%,45% { opacity:1;} 65% { opacity:0;} }
+
+/* Hover: diamond freezes + intense gold glow */.gicon-shell:hover .pay-diamond { animation-play-state: paused; filter: drop-shadow(0 0 6px rgba(255,184,0,.9)); }
+
+/* ============================================================
+   ICON 3 — G-CHAT ONE (crystal head + neural thread + cage)
+   ============================================================ */
+.one-cage { transform-origin: 24px 24px; transform-box: view-box; animation: cageSpin 90s linear infinite; } /* 4°/s */
+@keyframes cageSpin { to { transform: rotate(360deg); } }
+
+.one-neural { stroke-dasharray: 40; animation: neuralPulse 3s ease-in-out infinite; }
+@keyframes neuralPulse { 0% { stroke-dashoffset: 40; opacity:.4;} 50% { stroke-dashoffset: 0; opacity:1;} 100% { stroke-dashoffset: -40; opacity:.4;} }
+
+.one-eye { animation: eyeGlow 2s ease-in-out infinite; }
+@keyframes eyeGlow { 0%,100% { opacity:.75;} 50% { opacity:1;} }
+
+.one-ripple { transform-box: fill-box; transform-origin: center; animation: ripple 2.4s ease-out infinite; }
+.one-ripple.r2 { animation-delay: 1.2s; }
+@keyframes ripple { 0% { transform: scale(1); opacity:.8;} 100% { transform: scale(3.2); opacity:0;} }
+
+/* Hover: cage stops, head fills with light */
+.gicon-shell:hover .one-cage { animation-play-state: paused; }
+.gicon-shell:hover .one-head { fill: rgba(255,255,255,.35); }
+.gicon-shell:hover .one-ripple { animation-duration: 1s; }
+
+/* ============================================================
+   ICON 4 — G-FEED (Möbius strip + fragments + bokeh stars)
+   ============================================================ */
+.feed-strip { transform-origin: 24px 24px; transform-box: view-box; animation: stripSpin 120s linear infinite; }
+@keyframes stripSpin { to { transform: rotate(360deg); } }
+.gicon-shell:hover .feed-strip { animation-duration: 14s; } /* 10°/s on hover */
+
+.frag { animation: fragDrift 3.5s ease-in-out infinite; }
+.frag.f2 { animation-delay: .7s; } .frag.f3 { animation-delay: 1.4s; }
+.frag.f4 { animation-delay: 2.1s; } .frag.f5 { animation-delay: 2.8s; }
+@keyframes fragDrift { 0%,100% { transform: translate(0,0); opacity:.75;} 50% { transform: translate(1px,-1.2px); opacity:1;} }
+
+.feed-star { animation: twinkle 2.8s ease-in-out infinite; }
+.feed-star.t2 { animation-delay: .9s; } .feed-star.t3 { animation-delay: 1.7s; } .feed-star.t4 { animation-delay: 2.4s; }
+@keyframes twinkle { 0%,100% { opacity:.15;} 50% { opacity:.9;} }
+
+/* ============================================================
+   MENU CARDS (glassmorphism) + LABELS
+   ============================================================ */
+.gchat-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  width: 100%;
+}
+.gchat-menu-card {
+  display: flex;  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: transform .3s ease, border-color .3s ease, background .3s ease;
+}
+.gchat-menu-card:hover {
+  transform: translateY(-3px);
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(0,240,255,0.25);
+}
+.gchat-menu-label { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.7); }
+.gchat-menu-sub { font-size: 10px; color: rgba(255,255,255,0.4); }
+
+/* ---------- Responsive sizes (mobile 40 / tablet 44 / base 48) ---------- */
+@media (max-width: 480px) {
+  .gicon { width: 40px; height: 40px; }
+  .gchat-menu-grid { gap: 14px; }
+  .gchat-menu-card { padding: 16px; }
+}
+@media (min-width: 768px) {
+  .gicon { width: 44px; height: 44px; }
+}
+
+/* ---------- Accessibility: respect reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .gicon-shell, .gicon-shell *, .gchat-menu-card {
+    animation: none !important;
+    transition: none !important;
+  }
+}
