@@ -1,8 +1,35 @@
 "use client";
 
-import { GTribeIcon, GPayIcon, GChatOneIcon, GFeedIcon } from "./icons/AnimatedIcons";
+import { Users, Wallet, Bot, Rss } from "lucide-react";
 
 type View = "home" | "list" | "conversation" | "wallet" | "feed" | "gtribe" | "gchatone" | "profile" | "edit-profile" | "analytics" | "settings";
+
+const MENU_ITEMS = [
+  { 
+    icon: Users, 
+    label: "G-Tribe", 
+    sub: "Groups & Communities", 
+    view: "gtribe" as View 
+  },
+  { 
+    icon: Wallet, 
+    label: "G-Pay", 
+    sub: "Wallet & Earn", 
+    view: "wallet" as View 
+  },
+  { 
+    icon: Bot, 
+    label: "G-Chat One", 
+    sub: "Business & AI", 
+    view: "gchatone" as View 
+  },
+  { 
+    icon: Rss, 
+    label: "G-Feed", 
+    sub: "Social Posts", 
+    view: "feed" as View 
+  },
+];
 
 interface GChatMenuProps {
   onNavigate: (view: View) => void;
@@ -10,27 +37,23 @@ interface GChatMenuProps {
 
 export function GChatMenu({ onNavigate }: GChatMenuProps) {
   return (
-    <div className="gchat-menu-grid">
-      <div className="gchat-menu-card">
-        <GTribeIcon onClick={() => onNavigate("gtribe")} />
-        <span className="gchat-menu-label">G-Tribe</span>
-        <span className="gchat-menu-sub">Groups & Communities</span>
-      </div>
-      <div className="gchat-menu-card">
-        <GPayIcon onClick={() => onNavigate("wallet")} />
-        <span className="gchat-menu-label">G-Pay</span>
-        <span className="gchat-menu-sub">Wallet & Earn</span>
-      </div>
-      <div className="gchat-menu-card">
-        <GChatOneIcon onClick={() => onNavigate("gchatone")} />
-        <span className="gchat-menu-label">G-Chat One</span>
-        <span className="gchat-menu-sub">Business & AI</span>
-      </div>
-      <div className="gchat-menu-card">
-        <GFeedIcon onClick={() => onNavigate("feed")} />
-        <span className="gchat-menu-label">G-Feed</span>
-        <span className="gchat-menu-sub">Social Posts</span>
-      </div>
+    <div className="grid grid-cols-2 gap-4">
+      {MENU_ITEMS.map((item) => {
+        const Icon = item.icon;
+        return (
+          <button
+            key={item.label}
+            onClick={() => onNavigate(item.view)}
+            className="gchat-menu-card rounded-2xl p-5 text-left"
+          >
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-white/5 mb-3">
+              <Icon className="h-6 w-6 text-[#FFD700]" />
+            </div>
+            <p className="gchat-menu-label font-semibold text-base">{item.label}</p>
+            <p className="gchat-menu-sub text-xs">{item.sub}</p>
+          </button>
+        );
+      })}
     </div>
   );
 }
