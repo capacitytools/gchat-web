@@ -371,7 +371,7 @@
   to { opacity: 1; }
 }
 
-/* ---------- Composer ---------- */
+/* ---------- FAB ---------- */
 .gfeed-fab {
   position: fixed;
   right: 18px;
@@ -403,17 +403,20 @@
   50% { scale: 1.08; }
 }
 
+/* ---------- Composer (FIXED - Buttons Visible) ---------- */
 .composer {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  background: rgba(5, 10, 5, .85);
-  backdrop-filter: blur(20px);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  animation: fadeIn .25s ease;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 70 !important;
+  background: rgba(5, 10, 5, .92) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  animation: fadeIn .25s ease !important;
 }
+
 .composer-sheet {
   width: 100%;
   max-width: 28rem;
@@ -421,9 +424,73 @@
   border: 1px solid rgba(255, 215, 0, .2);
   border-bottom: none;
   border-radius: 24px 24px 0 0;
-  padding: 18px;
+  padding: 18px 18px 30px;
   max-height: 85vh;
   overflow-y: auto;
+  padding-bottom: calc(30px + env(safe-area-inset-bottom));
+}
+
+/* Composer buttons - FORCED VISIBLE */
+.composer-sheet .flex.gap-2 {
+  display: flex !important;
+  gap: 8px !important;
+  margin-top: 12px !important;
+  flex-wrap: wrap !important;
+}
+
+.composer-sheet .eng-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 8px 14px !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, .06) !important;
+  border: 1px solid rgba(255, 255, 255, .08) !important;
+  color: rgba(255, 245, 230, .7) !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
+  transition: all .2s ease !important;
+  flex-shrink: 0 !important;
+}
+
+.composer-sheet .eng-btn:hover {
+  background: rgba(255, 255, 255, .12) !important;
+  transform: translateY(-1px) !important;
+  border-color: rgba(255, 215, 0, .2) !important;
+}
+
+.composer-sheet .eng-btn.text-\[\#FFD700\] {
+  color: #FFD700 !important;
+}
+
+/* POST BUTTON - BIG and VISIBLE */
+.composer-sheet .flex-1.py-2\\.5 {
+  flex: 1 !important;
+  padding: 12px 20px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, #FFD700, #00F0FF) !important;
+  color: #0A1A0A !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: transform .2s ease, opacity .2s ease !important;
+  min-height: 48px !important;
+  min-width: 80px !important;
+}
+
+.composer-sheet .flex-1.py-2\\.5:hover:not(:disabled) {
+  transform: scale(1.02) !important;
+  box-shadow: 0 0 20px rgba(255, 215, 0, .3) !important;
+}
+
+.composer-sheet .flex-1.py-2\\.5:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.composer-sheet textarea {
+  min-height: 80px !important;
 }
 
 /* ---------- Toast ---------- */
@@ -497,6 +564,12 @@
   .composer-sheet {
     max-width: 100%;
     border-radius: 20px 20px 0 0;
+    padding: 16px 16px 24px;
+  }
+  .composer-sheet .flex-1.py-2\\.5 {
+    padding: 10px 16px !important;
+    min-height: 44px !important;
+    font-size: 13px !important;
   }
 }
 
