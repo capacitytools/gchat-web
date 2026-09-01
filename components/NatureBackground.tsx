@@ -1,188 +1,313 @@
-"use client";
+/* ============================================================
+   G-CHAT NATURE SANCTUARY — visual layer
+   ============================================================ */
 
-import { useEffect, useRef } from "react";
-import "./nature.css";
+.nature-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
 
-/*
-  NATURE SANCTUARY BACKGROUND
-  - Canvas: diagonal rain (15°), splash ripples, wandering fireflies
-  - CSS: god-rays, 3 parallax mist layers, flowing water + shimmer
-  - Performance: capped DPR, responsive particle counts, debounced resize,
-    respects prefers-reduced-motion.
-*/
-export function NatureBackground() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+/* Deep forest green -> charcoal */
+.nature-base {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(160deg, #0A1A0A 0%, #0c140c 45%, #0D0D0D 100%);
+}
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+/* ---- God rays (upper-left, swaying + breathing) ---- */
+.nature-rays {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(ellipse at 12% 8%, rgba(255, 215, 0, 0.22), transparent 55%),
+    linear-gradient(115deg, rgba(255, 215, 0, 0.12) 0%, transparent 40%);
+  filter: blur(30px);
+  transform-origin: 10% 5%;
+  animation: raySway 60s ease-in-out infinite alternate, rayPulse 8s ease-in-out infinite;
+  will-change: transform, opacity;
+}
 
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+/* ---- Mist layers (3 depths, parallax drift) ---- */
+.nature-mist {
+  position: absolute;
+  inset: 0;
+  filter: blur(40px);
+  will-change: transform, opacity;
+}
 
-    let width = 0;
-    let height = 0;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2); // cap for performance
-    let raf = 0;
-    let running = true;
+.mist-1 {
+  background: radial-gradient(60% 40% at 70% 60%, rgba(255, 240, 200, 0.10), transparent 70%);
+  animation: mistDrift1 120s linear infinite alternate;
+}
 
-    type Drop = { x: number; y: number; len: number; speed: number; op: number };
-    type Fly = { x: number; y: number; r: number; t: number; sx: number; sy: number; hue: string };
-    type Ripple = { x: number; y: number; r: number; max: number; a: number };
+.mist-2 {
+  background: radial-gradient(50% 35% at 30% 45%, rgba(255, 245, 230, 0.08), transparent 70%);
+  animation: mistDrift2 90s linear infinite alternate;
+}
 
-    let drops: Drop[] = [];
-    let flies: Fly[] = [];
-    let ripples: Ripple[] = [];
+.mist-3 {
+  background: radial-gradient(70% 45% at 50% 80%, rgba(255, 235, 190, 0.12), transparent 70%);
+  animation: mistBreathe 12s ease-in-out infinite;
+}
 
-    const spawnDrop = (anywhere = false): Drop => ({
-      x: Math.random() * (width + 100) - 50,
-      y: anywhere ? Math.random() * height : -30,
-      len: 8 + Math.random() * 10,
-      speed: 0.6 + Math.random() * 0.8, // meditative ~100px / 3s
-      op: 0.2 + Math.random() * 0.3,
-    });
+.nature-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
 
-    const spawnFly = (): Fly => ({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      r: 1 + Math.random() * 2.5,
-      t: Math.random() * Math.PI * 2,      sx: 0.15 + Math.random() * 0.25,
-      sy: 0.08 + Math.random() * 0.2,
-      hue: Math.random() < 0.5 ? "255,215,0" : Math.random() < 0.5 ? "140,255,220" : "255,245,230",
-    });
+/* ---- Flowing water (bottom) ---- */
+.nature-water {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 18%;
+  z-index: 2;
+}
 
-    const waterTop = () => height * 0.84;
+.nature-wave {
+  position: absolute;
+  bottom: 0;
+  left: -5%;
+  width: 110%;
+  height: 100%;
+}
 
-    const resize = () => {
-      width = window.innerWidth;
-      height = window.innerHeight;
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
-      canvas.style.width = width + "px";
-      canvas.style.height = height + "px";
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+.wave-back {
+  animation: waveSway 10s ease-in-out infinite alternate;
+  opacity: .8;
+}
 
-      // Responsive density: desktop 200 / tablet 140 / mobile 100
-      const isMobile = width < 768;
-      const isTablet = width >= 768 && width < 1200;
-      const rainCount = isMobile ? 100 : isTablet ? 140 : 200;
-      const flyCount = isMobile ? 16 : isTablet ? 22 : 30;
+.wave-front {
+  animation: waveSway 7s ease-in-out infinite alternate-reverse;
+}
 
-      drops = Array.from({ length: rainCount }, () => spawnDrop(true));
-      flies = Array.from({ length: flyCount }, () => spawnFly());
-    };
+.nature-water-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: shimmerSlide 7s ease-in-out infinite;
+}
 
-    let last = performance.now();
-    const frame = (now: number) => {
-      if (!running) return;
-      const dt = Math.min(now - last, 50);
-      last = now;
-      ctx.clearRect(0, 0, width, height);
+/* ============================================================
+   TYPOGRAPHY — warm white + gold
+   ============================================================ */
+.nature-title {
+  color: #FFF5E6;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, .55);
+}
 
-      const angle = 0.26; // ~15° diagonal
+.nature-gold {
+  color: #FFD700;
+  text-shadow: 0 0 18px rgba(255, 215, 0, .35);
+}
 
-      // ---- RAIN ----
-      ctx.lineWidth = 1;
-      for (const d of drops) {
-        d.y += d.speed * dt * 0.06;
-        d.x += d.speed * dt * 0.06 * angle;
-        ctx.strokeStyle = `rgba(200,230,255,${d.op})`;
-        ctx.beginPath();
-        ctx.moveTo(d.x, d.y);
-        ctx.lineTo(d.x - d.len * angle, d.y - d.len);
-        ctx.stroke();
+.nature-sub {
+  color: rgba(255, 245, 230, .6);
+}
 
-        // Splash when a drop hits the water zone
-        if (d.y > waterTop()) {
-          if (ripples.length < 40) {
-            ripples.push({              x: d.x,
-              y: waterTop() + Math.random() * (height - waterTop()) * 0.5,
-              r: 1,
-              max: 8 + Math.random() * 10,
-              a: 0.35,
-            });
-          }
-          Object.assign(d, spawnDrop());
-        }
-      }
+/* Entry animation (staggered via inline delay) */
+.nature-enter {
+  animation: cardIn .6s ease both;
+}
 
-      // ---- RIPPLES ----
-      for (let i = ripples.length - 1; i >= 0; i--) {
-        const r = ripples[i];
-        r.r += dt * 0.02;
-        r.a -= dt * 0.0004;
-        if (r.a <= 0 || r.r > r.max) {
-          ripples.splice(i, 1);
-          continue;
-        }
-        ctx.strokeStyle = `rgba(180,240,255,${r.a})`;
-        ctx.beginPath();
-        ctx.ellipse(r.x, r.y, r.r, r.r * 0.35, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+/* ============================================================
+   GOLD-TRIMMED GLASS CARDS (scoped to homepage)
+   ============================================================ */
+.nature-page .gchat-menu-card {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 215, 0, 0.15);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .08);
+  transition: transform .35s ease, border-color .35s ease, box-shadow .35s ease;
+  animation: cardIn .6s ease both, cardBreathe 4s ease-in-out infinite;
+}
 
-      // ---- FIREFLIES / DUST MOTES ----
-      for (const f of flies) {
-        f.t += dt * 0.001;
-        f.x += Math.sin(f.t * 1.7) * f.sx; // brownian wander
-        f.y += Math.cos(f.t * 1.3) * f.sy - 0.05; // gentle upward float
-        if (f.y < -10) f.y = height + 10;
-        if (f.x < -10) f.x = width + 10;
-        if (f.x > width + 10) f.x = -10;
+/* Staggered entry + breathe offsets */
+.nature-page .gchat-menu-card:nth-child(1) {
+  animation-delay: .2s, .8s;
+}
+.nature-page .gchat-menu-card:nth-child(2) {
+  animation-delay: .4s, 1s;
+}
+.nature-page .gchat-menu-card:nth-child(3) {
+  animation-delay: .6s, 1.2s;
+}
+.nature-page .gchat-menu-card:nth-child(4) {
+  animation-delay: .8s, 1.4s;
+}
 
-        const pulse = 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(f.t * 3));
-        const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * 4);
-        g.addColorStop(0, `rgba(${f.hue},${pulse})`);
-        g.addColorStop(1, `rgba(${f.hue},0)`);
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(f.x, f.y, f.r * 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
+/* Hover: gentle lift + golden glow */
+.nature-page .gchat-menu-card:hover {
+  transform: translateY(-8px);
+  border-color: rgba(255, 215, 0, .35);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .5), 0 0 26px rgba(255, 215, 0, .15);
+}
 
-      raf = requestAnimationFrame(frame);
-    };
+/* Slow diagonal glass shimmer sweep (10s cycle) */
+.nature-page .gchat-menu-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 245, 230, 0.10) 48%, rgba(255, 215, 0, 0.08) 52%, transparent 70%);
+  transform: translateX(-120%);
+  animation: glassShimmer 10s ease-in-out infinite;
+  pointer-events: none;
+}
 
-    resize();
-    let resizeTimer: any;    const onResize = () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(resize, 150); // debounced
-    };
-    window.addEventListener("resize", onResize);
+/* Warm label colors */
+.nature-page .gchat-menu-label {
+  color: rgba(255, 245, 230, .85);
+}
 
-    if (!reduced) raf = requestAnimationFrame(frame);
+.nature-page .gchat-menu-sub {
+  color: rgba(255, 215, 0, .45);
+}
 
-    return () => {
-      running = false;
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", onResize);
-      clearTimeout(resizeTimer);
-    };
-  }, []);
+/* Composer bar */
+.nature-composer {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 215, 0, 0.18);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .08);
+  transition: transform .35s ease, box-shadow .35s ease, border-color .35s ease;
+}
 
-  return (
-    <div className="nature-bg" aria-hidden="true">
-      {/* Deep forest gradient base */}
-      <div className="nature-base" />
-      {/* Golden god-rays from upper-left */}
-      <div className="nature-rays" />
-      {/* Parallax mist layers */}
-      <div className="nature-mist mist-1" />
-      <div className="nature-mist mist-2" />
-      <div className="nature-mist mist-3" />
-      {/* Canvas: rain + ripples + fireflies */}
-      <canvas ref={canvasRef} className="nature-canvas" />
-      {/* Flowing water at the bottom */}
-      <div className="nature-water">
-        <svg className="nature-wave wave-back" viewBox="0 0 1200 120" preserveAspectRatio="none">
-          <path d="M0,60 C150,100 350,20 600,60 C850,100 1050,20 1200,60 L1200,120 L0,120 Z" fill="rgba(26,90,90,0.5)" />
-        </svg>
-        <svg className="nature-wave wave-front" viewBox="0 0 1200 120" preserveAspectRatio="none">
-          <path d="M0,70 C200,30 400,110 600,70 C800,30 1000,110 1200,70 L1200,120 L0,120 Z" fill="rgba(10,58,58,0.85)" />
-        </svg>
-        <div className="nature-water-shimmer" />
-      </div>
-    </div>
-  );
+.nature-composer:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 215, 0, .35);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .45), 0 0 24px rgba(255, 215, 0, .12);
+}
+
+/* ============================================================
+   RESPONSIVE + PERFORMANCE
+   ============================================================ */
+@media (max-width: 768px) {
+  /* Lighter blur on phones */
+  .nature-page .gchat-menu-card,
+  .nature-composer {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+  .nature-mist {
+    filter: blur(24px);
+  }
+}
+
+/* Accessibility: calm everything for reduced-motion users */
+@media (prefers-reduced-motion: reduce) {
+  .nature-bg *,
+  .nature-page .gchat-menu-card,
+  .nature-enter,
+  .nature-composer {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ============================================================
+   ALL ANIMATIONS — defined here
+   ============================================================ */
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cardBreathe {
+  0%, 100% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.005;
+  }
+}
+
+@keyframes glassShimmer {
+  0%, 55% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes raySway {
+  from {
+    transform: rotate(-4deg);
+  }
+  to {
+    transform: rotate(11deg);
+  }
+}
+
+@keyframes rayPulse {
+  0%, 100% {
+    opacity: .5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes mistDrift1 {
+  from {
+    transform: translateX(6%);
+  }
+  to {
+    transform: translateX(-6%);
+  }
+}
+
+@keyframes mistDrift2 {
+  from {
+    transform: translateX(-7%);
+  }
+  to {
+    transform: translateX(7%);
+  }
+}
+
+@keyframes mistBreathe {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: .7;
+  }
+  50% {
+    transform: translateY(-14px);
+    opacity: 1;
+  }
+}
+
+@keyframes waveSway {
+  from {
+    transform: translateX(-2.5%);
+  }
+  to {
+    transform: translateX(2.5%);
+  }
+}
+
+@keyframes shimmerSlide {
+  0% {
+    background-position: -60% 0;
+  }
+  100% {
+    background-position: 160% 0;
+  }
 }
