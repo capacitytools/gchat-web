@@ -94,14 +94,20 @@ export function FeedView(_: FeedViewProps) {
     if (!user) return;
     setMe(user.id);
 
+    // FIXED: Removed .eq("is_published", true) to show all posts
     const { data: p } = await supabase
       .from("posts")
       .select("*, profiles:user_id(id, username, display_name, avatar_url, badges)")
       .eq("post_type", "post")
-      .eq("is_published", true)
       .order("created_at", { ascending: false })
       .limit(30);
-    if (!p) return;
+    
+    if (!p || p.length === 0) {
+      console.log("No posts found");
+      setPosts([]);
+      return;
+    }
+    
     const ids = p.map((x: any) => x.id);
 
     const [r, c, b, l, t, ach] = await Promise.all([
@@ -274,9 +280,6 @@ export function FeedView(_: FeedViewProps) {
     }
   };
 
-  /* ============================================================
-     FIXED: PUBLISH FUNCTION — Supabase Storage URL Fix
-     ============================================================ */
   const publish = async () => {
     if (!newText.trim() && !newImg && !voiceDraft) return;
     setPosting(true);
@@ -436,6 +439,13 @@ export function FeedView(_: FeedViewProps) {
       </div>
 
       {/* Posts */}
+      {feed.length === 0 && (
+        <div className="text-center py-20 text-[rgba(255,245,230,0.5)]">
+          <p className="text-lg mb-2">🌿 No posts yet</p>
+          <p className="text-sm">Tap the ✨ button to create your first post!</p>
+        </div>
+      )}
+      
       {feed.map((p, i) => {
         const author = p.profiles || {};
         const verified = Array.isArray(author.badges) && author.badges.includes("Verified");
