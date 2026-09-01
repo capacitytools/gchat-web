@@ -85,7 +85,8 @@ export function GChatApp() {
   const [profileCoverPreview, setProfileCoverPreview] = useState<string | null>(null);
   const [showNewChat, setShowNewChat] = useState(false);
   const [searchUsername, setSearchUsername] = useState("");
-  const [searchResult, setSearchResult] = useState<any>(null);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Auth Check
   useEffect(() => {
@@ -95,8 +96,8 @@ export function GChatApp() {
         router.push("/auth");
       } else {
         setUser(session.user);
-      }
-      setLoading(false);    };
+      }      setLoading(false);
+    };
     checkUser();
   }, [router]);
 
@@ -123,19 +124,28 @@ export function GChatApp() {
     };
   }, [activeChatId]);
 
-  // --- NEW: Save OneSignal Device ID to Database ---
+  // Save OneSignal Device ID (immediately + on change)
   useEffect(() => {
-    if (typeof window !== 'undefined' && user && (window as any).OneSignalDeferred) {
-      (window as any).OneSignalDeferred.push(function(OneSignal: any) {
-        OneSignal.User.PushSubscription.addEventListener('change', (event: any) => {
-          if (event.current.id) {
-            supabase.from('push_subscriptions').upsert({
-              user_id: user.id,
-              onesignal_id: event.current.id
-            });
-          }
-        });
-      });
+    if (typeof window === "undefined" || !user) return;
+
+    const saveId = async (onesignalId: string) => {
+      if (!onesignalId) return;
+      await supabase
+        .from("push_subscriptions")
+        .upsert(
+          { user_id: user.id, onesignal_id: onesignalId },
+          { onConflict: "user_id,onesignal_id" }
+        );
+    };
+
+    if ((window as any).OneSignalDeferred) {
+      (window as any).OneSignalDeferred.push(function (OneSignal: any) {
+        const currentId = OneSignal.User.PushSubscription.id;
+        if (currentId) saveId(currentId);
+
+        OneSignal.User.PushSubscription.addEventListener("change", (event: any) => {
+          if (event.current.id) saveId(event.current.id);
+        });      });
     }
   }, [user]);
 
@@ -145,7 +155,8 @@ export function GChatApp() {
     if (data) {
       setChats(data.map((item: any) => ({ 
         id: item.chats.id, 
-        name: item.chats.name,         updated_at: item.chats.created_at 
+        name: item.chats.name, 
+        updated_at: item.chats.created_at 
       })));
     }
   };
@@ -183,8 +194,7 @@ export function GChatApp() {
     if (!user) return;
     const { data: wallet } = await supabase.from("wallets").select("balance").eq("user_id", user.id).single();
     if (wallet) setWalletBalance(wallet.balance);
-    const { data: txs } = await supabase.from("transactions").select("*").or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`).order("created_at", { ascending: false }).limit(20);
-    if (txs) setTransactions(txs);
+    const { data: txs } = await supabase.from("transactions").select("*").or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`).order("created_at", { ascending: false }).limit(20);    if (txs) setTransactions(txs);
     const { data: ads } = await supabase.from("ad_campaigns").select("*").eq("is_active", true).limit(5);
     if (ads) setAvailableAds(ads);
   };
@@ -194,7 +204,8 @@ export function GChatApp() {
     const { data: postsData } = await supabase.from("posts").select(`*, profiles:user_id(username, display_name)`).eq("post_type", "post").order("created_at", { ascending: false }).limit(20);
     if (postsData) {
       const postsWithLikes = await Promise.all(postsData.map(async (post: any) => {
-        const { data: likeData } = await supabase.from("post_likes").select("id").eq("user_id", user.id).eq("post_id", post.id).single();        return { ...post, is_liked: !!likeData, likes_count: post.likes_count || 0 };
+        const { data: likeData } = await supabase.from("post_likes").select("id").eq("user_id", user.id).eq("post_id", post.id).single();
+        return { ...post, is_liked: !!likeData, likes_count: post.likes_count || 0 };
       }));
       setPosts(postsWithLikes);
     }
@@ -232,8 +243,7 @@ export function GChatApp() {
     }
   };
 
-  // --- UPDATED: sendMessage now triggers push notifications ---
-  const sendMessage = async () => {
+  // Send message + trigger push notification  const sendMessage = async () => {
     if (!draft.trim()) return;
     
     const { data } = await supabase.from("messages").insert({ 
@@ -243,11 +253,11 @@ export function GChatApp() {
     }).select().single();
     
     if (data) {
-      setMessages(prev => {        if (prev.some(m => m.id === data.id)) return prev;
+      setMessages(prev => {
+        if (prev.some(m => m.id === data.id)) return prev;
         return [...prev, data];
       });
 
-      // Trigger Push Notification
       try {
         await fetch('/api/notify', {
           method: 'POST',
@@ -255,7 +265,8 @@ export function GChatApp() {
           body: JSON.stringify({
             chat_id: activeChatId,
             message_text: draft,
-            sender_name: profile?.display_name || 'Someone'
+            sender_name: profile?.display_name || 'Someone',
+            sender_id: user.id
           })
         });
       } catch (error) {
@@ -282,7 +293,6 @@ export function GChatApp() {
     setSendAmount("");
     fetchWalletData();
   };
-
   const handleWithdraw = async () => {
     const amount = parseInt(withdrawAmount) * 100;
     if (!amount || amount <= 0 || amount > walletBalance) { 
@@ -292,7 +302,8 @@ export function GChatApp() {
     if (!bankName || !accountNumber || !accountName) { 
       alert("Please fill in all bank details."); 
       return; 
-    }    setIsWithdrawing(true);
+    }
+    setIsWithdrawing(true);
     try {
       const res = await fetch('/api/withdraw', {
         method: 'POST',
@@ -330,8 +341,7 @@ export function GChatApp() {
         const compressedFile = await imageCompression(profileAvatar, { maxSizeMB: 1, maxWidthOrHeight: 800 });
         const fileName = `${user.id}/avatar/${Date.now()}.${compressedFile.name.split('.').pop()}`;
         const { data: uploadData } = await supabase.storage.from("messages").upload(fileName, compressedFile);
-        if (uploadData) {
-          const { data: urlData } = supabase.storage.from("messages").getPublicUrl(uploadData.path);
+        if (uploadData) {          const { data: urlData } = supabase.storage.from("messages").getPublicUrl(uploadData.path);
           avatarUrl = urlData.publicUrl;
         }
       }
@@ -341,7 +351,8 @@ export function GChatApp() {
         const fileName = `${user.id}/cover/${Date.now()}.${compressedFile.name.split('.').pop()}`;
         const { data: uploadData } = await supabase.storage.from("messages").upload(fileName, compressedFile);
         if (uploadData) {
-          const { data: urlData } = supabase.storage.from("messages").getPublicUrl(uploadData.path);          coverUrl = urlData.publicUrl;
+          const { data: urlData } = supabase.storage.from("messages").getPublicUrl(uploadData.path);
+          coverUrl = urlData.publicUrl;
         }
       }
 
@@ -379,8 +390,7 @@ export function GChatApp() {
       if (error) throw error;
       
       await supabase.from("business_ai_settings").insert({
-        business_id: bizData.id, 
-        auto_reply_enabled: !!autoReply, 
+        business_id: bizData.id,         auto_reply_enabled: !!autoReply, 
         ai_tone: "professional"
       });
       
@@ -390,7 +400,8 @@ export function GChatApp() {
       setAutoReply("");
       fetchBusinessProfile();
       alert("Business profile created with AI Auto-Reply!");
-    } catch (err: any) {       alert("Failed to setup business: " + err.message); 
+    } catch (err: any) { 
+      alert("Failed to setup business: " + err.message); 
     }
   };
 
@@ -428,8 +439,7 @@ export function GChatApp() {
     setAiSummary("🤖 AI is analyzing your chat...");
     setTimeout(() => { 
       setAiSummary(`🤖 AI Summary: You exchanged ${messages.length} messages.`); 
-    }, 1500);
-  };
+    }, 1500);  };
 
   const handleCreatePost = async () => {
     if (!postContent.trim() && !postImage) return;
@@ -439,7 +449,8 @@ export function GChatApp() {
       if (postImage) {
         const compressedFile = await imageCompression(postImage, { maxSizeMB: 2, maxWidthOrHeight: 1920, useWebWorker: true });
         const fileName = `${user.id}/posts/${Date.now()}.${compressedFile.name.split('.').pop()}`;
-        const { data: uploadData } = await supabase.storage.from("messages").upload(fileName, compressedFile);        if (uploadData) {
+        const { data: uploadData } = await supabase.storage.from("messages").upload(fileName, compressedFile);
+        if (uploadData) {
           const { data: urlData } = supabase.storage.from("messages").getPublicUrl(uploadData.path);
           mediaUrl = urlData.publicUrl;
         }
@@ -477,8 +488,7 @@ export function GChatApp() {
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) return;
     try {
-      const { data } = await supabase.from("groups").insert({
-        name: newGroupName, 
+      const { data } = await supabase.from("groups").insert({        name: newGroupName, 
         description: newGroupDesc, 
         owner_id: user.id, 
         group_type: "group"
@@ -488,7 +498,8 @@ export function GChatApp() {
         await supabase.from("group_members").insert({ 
           group_id: data.id, 
           user_id: user.id, 
-          role: "owner"         });
+          role: "owner" 
+        });
         setShowCreateGroup(false); 
         setNewGroupName(""); 
         setNewGroupDesc("");
@@ -500,19 +511,42 @@ export function GChatApp() {
     }
   };
 
+  // Search by username, display name, OR email (partial + case-insensitive)
   const handleSearchUser = async () => {
-    if (!searchUsername.trim()) return;
-    const { data } = await supabase.from("profiles").select("*").eq("username", searchUsername.trim()).single();
-    setSearchResult(data);
+    const term = searchUsername.trim();
+    if (!term) {
+      setSearchResults([]);
+      return;
+    }
+    setIsSearching(true);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, username, display_name, email, avatar_url")
+      .or(`username.ilike.%${term}%,display_name.ilike.%${term}%,email.ilike.%${term}%`)
+      .neq("id", user.id)
+      .limit(10);
+
+    if (!error && data) setSearchResults(data);
+    else setSearchResults([]);
+    setIsSearching(false);
   };
 
-  const handleCreateChat = async (targetUserId: string) => {
+  // Live search while typing (400ms debounce)
+  useEffect(() => {
+    if (!showNewChat) return;
+    const t = setTimeout(() => {
+      if (searchUsername.trim().length >= 2) handleSearchUser();
+      else setSearchResults([]);
+    }, 400);    return () => clearTimeout(t);
+  }, [searchUsername, showNewChat]);
+
+  const handleCreateChat = async (target: any) => {
     try {
       const { data: chat } = await supabase
         .from("chats")
-        .insert({ 
-          name: `Chat with ${searchResult.display_name}`, 
-          created_by: user.id 
+        .insert({
+          name: `Chat with ${target.display_name || target.username}`,
+          created_by: user.id
         })
         .select()
         .single();
@@ -520,16 +554,18 @@ export function GChatApp() {
       if (chat) {
         await supabase.from("chat_members").insert([
           { chat_id: chat.id, user_id: user.id, role: "owner" },
-          { chat_id: chat.id, user_id: targetUserId, role: "member" }
+          { chat_id: chat.id, user_id: target.id, role: "member" }
         ]);
         setShowNewChat(false);
         setSearchUsername("");
-        setSearchResult(null);
+        setSearchResults([]);
         fetchChats();
-        alert("Chat created successfully!");
+        setActiveChatId(chat.id);
+        setActiveChatName(chat.name);
+        setView("conversation");
       }
-    } catch (err: any) { 
-      alert("Failed to create chat: " + err.message); 
+    } catch (err: any) {
+      alert("Failed to create chat: " + err.message);
     }
   };
 
@@ -537,7 +573,8 @@ export function GChatApp() {
     setActiveChatId(chat.id); 
     setActiveChatName(chat.name); 
     setView("conversation"); 
-    setAiSummary(null);   };
+    setAiSummary(null); 
+  };
 
   if (loading) {
     return (
@@ -549,8 +586,7 @@ export function GChatApp() {
   
   if (!user) return null;
 
-  return (
-    <div className="relative min-h-screen w-full max-w-md mx-auto text-white overflow-hidden font-sans">
+  return (    <div className="relative min-h-screen w-full max-w-md mx-auto text-white overflow-hidden font-sans">
       <GChatBackground />
 
       {/* Render views based on state */}
@@ -586,7 +622,8 @@ export function GChatApp() {
               setProfileAvatar(f); 
               setProfileAvatarPreview(URL.createObjectURL(f)); 
             }
-          }}          onCoverChange={(e) => { 
+          }}
+          onCoverChange={(e) => { 
             const f = e.target.files?.[0]; 
             if(f) { 
               setProfileCover(f); 
@@ -598,13 +635,12 @@ export function GChatApp() {
       )}
       {view === "analytics" && profile && <AnalyticsView setView={setView} profile={profile} walletBalance={walletBalance} />}
       {view === "settings" && <SettingsView setView={setView} onLogout={() => supabase.auth.signOut()} />}
-      {view === "gtribe" && <GTribeView groups={groups} onCreateGroup={() => setShowCreateGroup(true)} />}
-      {view === "gchatone" && <GChatOneView businessProfile={businessProfile} onSetupBusiness={() => setShowBusinessSetup(true)} />}
+      {view === "gtribe" && <GTribeView groups={groups} onCreateGroup={() => setShowCreateGroup(true)} />}      {view === "gchatone" && <GChatOneView businessProfile={businessProfile} onSetupBusiness={() => setShowBusinessSetup(true)} />}
 
       {/* Notification Prompt */}
       <NotificationPrompt />
 
-      {/* Modals */}
+      {/* NEW CHAT MODAL — search by username, name, or email */}
       {showNewChat && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setShowNewChat(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-6" onClick={e => e.stopPropagation()}>
@@ -614,36 +650,52 @@ export function GChatApp() {
                 <X className="h-5 w-5" />
               </button>
             </div>
+
             <div className="flex gap-2 mb-4">
-              <input 
-                value={searchUsername} 
-                onChange={(e) => setSearchUsername(e.target.value)} 
-                placeholder="Search username..." 
-                className="flex-1 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white" 
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchUser()} 
+              <input
+                value={searchUsername}
+                onChange={(e) => setSearchUsername(e.target.value)}
+                placeholder="Username, name, or email..."
+                className="flex-1 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white"
+                onKeyDown={(e) => e.key === 'Enter' && handleSearchUser()}
               />
               <button onClick={handleSearchUser} className="p-3 rounded-xl bg-emerald-500/20 text-emerald-400">
                 <Search className="h-5 w-5" />
               </button>
             </div>
-            {searchResult && (
-              <div className="p-4 rounded-xl bg-white/5 border border-white/5 mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold">
-                    {searchResult.display_name?.charAt(0) || "U"}
+
+            {/* Search results with full details */}
+            <div className="max-h-72 overflow-y-auto space-y-2">
+              {isSearching && <p className="text-center text-sm text-gray-400 py-4">Searching...</p>}
+
+              {!isSearching && searchUsername.trim().length >= 2 && searchResults.length === 0 && (
+                <p className="text-center text-sm text-gray-500 py-4">No user found on G-Chat.</p>
+              )}
+
+              {searchResults.map((person) => (
+                <div key={person.id} className="p-3 rounded-xl bg-white/5 border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center font-bold overflow-hidden shrink-0">
+                      {person.avatar_url ? (
+                        <img src={person.avatar_url} className="w-full h-full object-cover" alt="" />
+                      ) : (
+                        (person.display_name || person.username || "U").charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-white truncate">{person.display_name || "User"}</p>
+                      <p className="text-xs text-gray-400 truncate">@{person.username}</p>                      {person.email && <p className="text-[10px] text-gray-500 truncate">{person.email}</p>}
+                    </div>
+                    <button
+                      onClick={() => handleCreateChat(person)}
+                      className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-sm font-bold shrink-0"
+                    >
+                      Chat
+                    </button>
                   </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-white">{searchResult.display_name}</p>
-                    <p className="text-xs text-gray-400">@{searchResult.username}</p>
-                  </div>                  <button 
-                    onClick={() => handleCreateChat(searchResult.id)} 
-                    className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-sm font-bold"
-                  >
-                    Chat
-                  </button>
                 </div>
-              </div>
-            )}
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -681,10 +733,10 @@ export function GChatApp() {
             <div className="flex gap-2">
               <button onClick={() => setShowWithdraw(false)} className="flex-1 py-3 rounded-xl bg-white/5">
                 Cancel
-              </button>
-              <button 
+              </button>              <button 
                 onClick={handleWithdraw} 
-                disabled={isWithdrawing}                 className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold disabled:opacity-50"
+                disabled={isWithdrawing} 
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold disabled:opacity-50"
               >
                 {isWithdrawing ? "Processing..." : "Withdraw"}
               </button>
@@ -730,10 +782,10 @@ export function GChatApp() {
         </div>
       )}
 
-      {showCreateGroup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setShowCreateGroup(false)}>
+      {showCreateGroup && (        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setShowCreateGroup(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-6" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">Create Group</h3>            <input 
+            <h3 className="text-lg font-bold mb-4">Create Group</h3>
+            <input 
               value={newGroupName} 
               onChange={(e) => setNewGroupName(e.target.value)} 
               placeholder="Group name" 
@@ -779,10 +831,10 @@ export function GChatApp() {
               <button 
                 onClick={() => document.getElementById('post-image-input')?.click()} 
                 className="flex-1 py-3 rounded-xl bg-white/5 flex items-center justify-center gap-2"
-              >
-                <ImageIcon className="h-5 w-5" /> 
+              >                <ImageIcon className="h-5 w-5" /> 
                 Photo
-              </button>              <button 
+              </button>
+              <button 
                 onClick={handleCreatePost} 
                 disabled={isPosting} 
                 className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold disabled:opacity-50"
@@ -828,10 +880,10 @@ export function GChatApp() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </div>      )}
 
-      {watchingAd && (        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
+      {watchingAd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-8 text-center">
             <div className="w-20 h-20 rounded-full bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center mx-auto mb-6 animate-pulse">
               <PlayCircle className="h-10 w-10 text-white" />
@@ -877,10 +929,10 @@ export function GChatApp() {
             onClick={() => setView("feed")} 
             className={`flex flex-col items-center gap-1 ${view === "feed" ? "text-cyan-400" : "text-gray-500"}`}
           >
-            <ImageIcon className="h-5 w-5" />
-            <span className="text-[9px]">Feed</span>
+            <ImageIcon className="h-5 w-5" />            <span className="text-[9px]">Feed</span>
           </button>
-          <button             onClick={() => setView("wallet")} 
+          <button 
+            onClick={() => setView("wallet")} 
             className={`flex flex-col items-center gap-1 ${view === "wallet" ? "text-cyan-400" : "text-gray-500"}`}
           >
             <Wallet className="h-5 w-5" />
