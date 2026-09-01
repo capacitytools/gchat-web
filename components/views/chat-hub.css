@@ -1,22 +1,8 @@
 /* ============================================================
-   G-CHAT CHAT HUB — COMPLETE VISUAL SYSTEM
+   G-CHAT LIVING CHAT HUB — nature-luxury visual system
    ============================================================ */
 
-/* ---------- GLASSMORPHISM BASE ---------- */
-.glass {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
-  border: 1px solid rgba(255, 215, 0, 0.12);
-  border-radius: 20px;
-}
-
-.glass-gold {
-  border-color: rgba(255, 215, 0, 0.2);
-  box-shadow: 0 0 40px rgba(255, 215, 0, 0.04);
-}
-
-/* ---------- LIVING ORB ---------- */
+/* ---------- Living Orb (bottom nav icon) ---------- */
 .orb-wrap {
   position: relative;
   width: 26px;
@@ -31,11 +17,6 @@
   background: radial-gradient(circle at 35% 35%, #00F0FF, #B026FF 75%);
   animation: orbPulse 2.4s ease-in-out infinite;
   box-shadow: 0 0 10px rgba(0, 240, 255, .6);
-}
-
-@keyframes orbPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.18); }
 }
 
 .orb-ring {
@@ -53,10 +34,23 @@
   animation: orbSpin 9s linear infinite;
 }
 
-@keyframes orbSpin {
-  to { transform: rotate(405deg); }
+@keyframes orbPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.18);
+  }
 }
 
+@keyframes orbSpin {
+  to {
+    transform: rotate(405deg);
+  }
+}
+
+/* Unread = liquid fill ring */
 .orb-badge {
   position: absolute;
   inset: -3px;
@@ -66,7 +60,7 @@
   mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
 }
 
-/* ---------- SPARK BUTTON ---------- */
+/* ---------- Spark button (pulsing diamond + orbiting particles) ---------- */
 .spark-btn {
   position: relative;
   width: 52px;
@@ -87,8 +81,13 @@
 }
 
 @keyframes sparkPulse {
-  0%, 100% { transform: rotate(45deg) scale(1); }
-  50% { transform: rotate(45deg) scale(1.12); }
+  0%,
+  100% {
+    transform: rotate(45deg) scale(1);
+  }
+  50% {
+    transform: rotate(45deg) scale(1.12);
+  }
 }
 
 .spark-orbit {
@@ -115,11 +114,15 @@
 }
 
 @keyframes orbit {
-  from { transform: rotate(0) translateX(24px); }
-  to { transform: rotate(360deg) translateX(24px); }
+  from {
+    transform: rotate(0) translateX(24px);
+  }
+  to {
+    transform: rotate(360deg) translateX(24px);
+  }
 }
 
-/* ---------- HUB OVERLAY ---------- */
+/* ---------- Hub overlay ---------- */
 .hub-overlay {
   position: fixed;
   inset: 0;
@@ -130,8 +133,14 @@
 }
 
 @keyframes hubIn {
-  from { opacity: 0; transform: scale(.92); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .hub-scroll {
@@ -151,14 +160,31 @@
   animation: zoneUp .6s ease both;
 }
 
-.hub-zone:nth-child(2) { animation-delay: .08s; }
-.hub-zone:nth-child(3) { animation-delay: .16s; }
-.hub-zone:nth-child(4) { animation-delay: .24s; }
-.hub-zone:nth-child(5) { animation-delay: .32s; }
+.hub-zone:nth-child(2) {
+  animation-delay: .08s;
+}
+
+.hub-zone:nth-child(3) {
+  animation-delay: .16s;
+}
+
+.hub-zone:nth-child(4) {
+  animation-delay: .24s;
+}
+
+.hub-zone:nth-child(5) {
+  animation-delay: .32s;
+}
 
 @keyframes zoneUp {
-  from { opacity: 0; transform: translateY(22px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .hub-title {
@@ -170,7 +196,7 @@
   color: #FFD700;
 }
 
-/* ---------- RADAR ---------- */
+/* ---------- Zone A: Presence Radar ---------- */
 .radar {
   position: relative;
   height: 190px;
@@ -223,7 +249,7 @@
   color: rgba(255, 245, 230, .7);
 }
 
-/* ---------- SUGGESTED CARDS ---------- */
+/* ---------- Zone C: Suggested horizontal cards ---------- */
 .sugg-row {
   display: flex;
   gap: 12px;
@@ -257,7 +283,7 @@
   color: #FFD700;
 }
 
-/* ---------- QUICK ACTIONS ---------- */
+/* ---------- Zone D: Quick actions ---------- */
 .qa-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -284,7 +310,7 @@
   background: rgba(255, 255, 255, .09);
 }
 
-/* ---------- STARTER CHIPS ---------- */
+/* ---------- Zone E: Starters ---------- */
 .starter-chip {
   display: inline-block;
   margin: 4px;
@@ -303,7 +329,7 @@
   background: rgba(255, 215, 0, .16);
 }
 
-/* ---------- LIVING CONVERSATION ROWS ---------- */
+/* ---------- Living conversation rows ---------- */
 .hub-list {
   padding: 10px 14px 90px;
 }
@@ -434,7 +460,7 @@
   background: rgba(255, 215, 0, .15);
 }
 
-/* ---------- TOAST ---------- */
+/* Toast */
 .hub-toast {
   position: fixed;
   bottom: 90px;
@@ -451,7 +477,6 @@
   animation: zoneUp .3s ease both;
 }
 
-/* ---------- REDUCED MOTION ---------- */
 @media (prefers-reduced-motion: reduce) {
   .orb-core,
   .orb-ring,
