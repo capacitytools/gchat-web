@@ -2,7 +2,7 @@
 
 import { MessageCircle, Send, User } from "lucide-react";
 import { GChatMenu } from "../GChatMenu";
-import { NatureBackground } from "../NatureBackground";
+import { NatureBackground } from "@/components/NatureBackground";
 
 type View = "home" | "list" | "conversation" | "wallet" | "feed" | "gtribe" | "gchatone" | "profile" | "edit-profile" | "analytics" | "settings";
 
@@ -21,19 +21,30 @@ export function HomeView({ setView }: HomeViewProps) {
         {/* Header */}
         <div className="flex justify-between items-center mb-8 nature-enter">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center font-bold text-black text-xl">G</div>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center font-bold text-black text-xl">
+              G
+            </div>
             <span className="font-bold text-lg nature-title">G-Chat</span>
           </div>
-          <button onClick={() => setView("profile")} className="p-2 rounded-full bg-white/5">
+          <button
+            onClick={() => setView("profile")}
+            className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors"
+          >
             <User className="h-5 w-5 text-amber-100/70" />
           </button>
         </div>
 
         {/* Hero */}
         <div className="text-center mb-8 mt-2 nature-enter" style={{ animationDelay: ".15s" }}>
-          <h1 className="nature-title text-3xl sm:text-4xl font-bold mb-2">One World. One App.</h1>
-          <p className="nature-gold text-base font-medium mb-2">Infinite Possibilities.</p>
-          <p className="nature-sub text-sm">Chat Smarter. Live Better. Earn Together.</p>
+          <h1 className="nature-title text-3xl sm:text-4xl font-bold mb-2">
+            One World. One App.
+          </h1>
+          <p className="nature-gold text-base font-medium mb-2">
+            Infinite Possibilities.
+          </p>
+          <p className="nature-sub text-sm">
+            Chat Smarter. Live Better. Earn Together.
+          </p>
         </div>
 
         {/* Living menu (icons keep their own animations) */}
