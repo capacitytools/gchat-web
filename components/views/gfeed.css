@@ -1,0 +1,515 @@
+/* ============================================================
+   G-FEED — THE MOST ADDICTIVE SOCIAL FEED
+   ============================================================ */
+
+/* ---------- Container ---------- */
+.gfeed-wrap {
+  position: relative;
+  z-index: 10;
+  min-height: 100vh;
+  padding-bottom: 96px;
+  overflow-x: hidden;
+}
+
+/* ---------- Header ---------- */
+.gfeed-head {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  background: rgba(10, 26, 10, .78);
+  border-bottom: 1px solid rgba(255, 215, 0, .15);
+  padding: 12px 16px 8px;
+}
+
+.gfeed-title {
+  color: #FFF5E6;
+  font-weight: 800;
+  font-size: 20px;
+  background: linear-gradient(135deg, #FFD700, #00F0FF);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ---------- Tabs ---------- */
+.gfeed-tabs {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.gfeed-tabs::-webkit-scrollbar {
+  display: none;
+}
+.gfeed-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: rgba(255, 245, 230, .55);
+  font-size: 13px;
+  padding: 2px 2px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .3s ease;
+}
+.gfeed-tab.active {
+  color: #FFD700;
+  border-bottom-color: #FFD700;
+}
+.gfeed-tab:hover {
+  color: #FFF5E6;
+}
+
+/* ---------- XP / Gamification ---------- */
+.xp-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: rgba(255, 245, 230, .75);
+}
+.xp-bar {
+  width: 70px;
+  height: 4px;
+  background: rgba(255, 255, 255, .12);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.xp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #FFD700, #00F0FF);
+  border-radius: 999px;
+  transition: width .6s ease;
+}
+.badge-chip {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  color: #FFD700;
+  background: rgba(255, 215, 0, .1);
+  border: 1px solid rgba(255, 215, 0, .3);
+  animation: badgePulse 2s ease-in-out infinite;
+}
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* ---------- Post Card ---------- */
+.post-card {
+  margin: 12px 14px;
+  padding: 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 215, 0, .15);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .06);
+  animation: postIn .5s ease both;
+  transition: transform .3s ease, border-color .3s ease;
+}
+.post-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 215, 0, .25);
+}
+
+@keyframes postIn {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ---------- Link ---------- */
+.gfeed-link {
+  color: #00F0FF;
+  text-decoration: underline;
+  word-break: break-all;
+  transition: color .3s ease;
+}
+.gfeed-link:hover {
+  color: #FFD700;
+}
+
+/* ---------- Media ---------- */
+.post-media {
+  border-radius: 14px;
+  margin-top: 10px;
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  cursor: zoom-in;
+  transition: transform .3s ease;
+}
+.post-media:hover {
+  transform: scale(1.01);
+}
+
+/* ---------- Avatar Ring ---------- */
+.ava-ring {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+.ava-ring .face {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  background: linear-gradient(135deg, #0891b2, #7c3aed);
+  color: #fff;
+  overflow: hidden;
+}
+.ava-ring .ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #22c55e;
+  animation: ringPulse 2.4s ease-in-out infinite;
+}
+.ava-ring .ring.offline {
+  border-color: rgba(255, 255, 255, .2);
+  animation: none;
+}
+@keyframes ringPulse {
+  0%, 100% { opacity: .5; }
+  50% { opacity: 1; }
+}
+
+/* ---------- Engagement Bar ---------- */
+.eng-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.eng-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 9px;
+  border-radius: 12px;
+  background: none;
+  border: none;
+  color: rgba(255, 245, 230, .7);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .2s, transform .2s;
+}
+.eng-btn:hover {
+  background: rgba(255, 255, 255, .08);
+  transform: translateY(-1px);
+}
+.eng-btn:active {
+  transform: scale(0.95);
+}
+.eng-btn.liked {
+  color: #FF2D95;
+}
+.eng-btn.saved {
+  color: #FFD700;
+}
+
+/* ---------- Like Explosion ---------- */
+.burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 30;
+}
+.burst i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: fly .7s ease-out both;
+}
+@keyframes fly {
+  to {
+    transform: translate(var(--dx), var(--dy)) scale(0);
+    opacity: 0;
+  }
+}
+
+/* ---------- Reaction Wheel ---------- */
+.rw {
+  position: absolute;
+  bottom: 105%;
+  left: 6px;
+  width: 0;
+  height: 0;
+  z-index: 40;
+}
+.rw-item {
+  position: absolute;
+  left: -17px;
+  top: -17px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 26, 10, .92);
+  border: 1px solid rgba(255, 215, 0, .35);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform .2s ease;
+}
+.rw-item:hover {
+  transform: scale(1.15);
+}
+.rw-item > span {
+  font-size: 18px;
+  animation: rwPop .3s cubic-bezier(.34, 1.56, .64, 1) both;
+}
+@keyframes rwPop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+/* ---------- Reaction Chips ---------- */
+.react-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 4px 0 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #FFF5E6;
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid rgba(255, 255, 255, .12);
+  animation: chipIn .3s ease both;
+}
+@keyframes chipIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ---------- Polls ---------- */
+.poll-opt {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 215, 0, .2);
+  background: rgba(255, 255, 255, .04);
+  overflow: hidden;
+  cursor: pointer;
+  color: #FFF5E6;
+  font-size: 13px;
+  transition: border-color .3s ease;
+}
+.poll-opt:hover {
+  border-color: rgba(255, 215, 0, .4);
+}
+.poll-fill {
+  position: absolute;
+  inset: 0;
+  width: var(--w);
+  background: linear-gradient(90deg, rgba(255, 215, 0, .28), rgba(0, 240, 255, .18));
+  transition: width .6s ease;
+}
+
+/* ---------- Comments ---------- */
+.cmt {
+  animation: cmtIn .35s ease both;
+}
+@keyframes cmtIn {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: none; }
+}
+.cmt-reply {
+  margin-left: 28px;
+}
+
+/* ---------- Lightbox ---------- */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, .93);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn .25s ease;
+  cursor: zoom-out;
+}
+.lightbox img {
+  max-width: 94%;
+  max-height: 90%;
+  border-radius: 12px;
+  animation: zoomIn .3s ease;
+}
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---------- Composer ---------- */
+.gfeed-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 88px;
+  z-index: 40;
+  width: 54px;
+  height: 54px;
+  border: none;
+  cursor: pointer;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #FFD700, #00F0FF);
+  transform: rotate(45deg);
+  box-shadow: 0 8px 26px rgba(255, 215, 0, .35);
+  animation: fabPulse 2.4s ease-in-out infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .3s ease;
+}
+.gfeed-fab:hover {
+  transform: rotate(45deg) scale(1.1);
+}
+.gfeed-fab svg {
+  transform: rotate(-45deg);
+  color: #0A1A0A;
+}
+@keyframes fabPulse {
+  0%, 100% { scale: 1; }
+  50% { scale: 1.08; }
+}
+
+.composer {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(5, 10, 5, .85);
+  backdrop-filter: blur(20px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn .25s ease;
+}
+.composer-sheet {
+  width: 100%;
+  max-width: 28rem;
+  background: #0c140c;
+  border: 1px solid rgba(255, 215, 0, .2);
+  border-bottom: none;
+  border-radius: 24px 24px 0 0;
+  padding: 18px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+/* ---------- Toast ---------- */
+.gfeed-toast {
+  position: fixed;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 95;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(255, 215, 0, .15);
+  border: 1px solid rgba(255, 215, 0, .4);
+  backdrop-filter: blur(20px);
+  color: #FFF5E6;
+  font-size: 13px;
+  animation: postIn .3s ease both;
+}
+
+/* ---------- Live Viewers ---------- */
+.live-viewers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+.live-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 215, 0, .3);
+  overflow: hidden;
+  animation: floatUp 3s ease-in-out infinite;
+}
+.live-avatar:nth-child(2) { animation-delay: .5s; }
+.live-avatar:nth-child(3) { animation-delay: 1s; }
+@keyframes floatUp {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* ---------- Heat Map ---------- */
+.heat-map {
+  display: flex;
+  gap: 2px;
+  margin-top: 8px;
+  height: 20px;
+  align-items: flex-end;
+}
+.heat-bar {
+  flex: 1;
+  background: linear-gradient(180deg, #FFD700, #00F0FF);
+  border-radius: 2px;
+  transition: height .6s ease;
+  min-height: 2px;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+  .post-card {
+    margin: 10px 10px;
+    padding: 12px;
+  }
+  .gfeed-head {
+    padding: 10px 12px 6px;
+  }
+  .eng-btn {
+    padding: 6px 7px;
+    font-size: 11px;
+  }
+  .composer-sheet {
+    max-width: 100%;
+    border-radius: 20px 20px 0 0;
+  }
+}
+
+/* ---------- Reduced Motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .post-card,
+  .cmt,
+  .rw-item > span,
+  .burst i,
+  .gfeed-fab,
+  .ava-ring .ring,
+  .react-chip {
+    animation: none !important;
+    transition: none !important;
+  }
+}
