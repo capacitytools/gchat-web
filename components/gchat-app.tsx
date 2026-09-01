@@ -47,7 +47,8 @@ export function GChatApp() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [walletBalance, setWalletBalance] = useState(0);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);  const [showSendMoney, setShowSendMoney] = useState(false);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [showSendMoney, setShowSendMoney] = useState(false);
   const [sendAmount, setSendAmount] = useState("");
   const [availableAds, setAvailableAds] = useState<AdCampaign[]>([]);
   const [watchingAd, setWatchingAd] = useState<AdCampaign | null>(null);
@@ -96,7 +97,8 @@ export function GChatApp() {
         router.push("/auth");
       } else {
         setUser(session.user);
-      }      setLoading(false);
+      }
+      setLoading(false);
     };
     checkUser();
   }, [router]);
@@ -145,7 +147,8 @@ export function GChatApp() {
 
         OneSignal.User.PushSubscription.addEventListener("change", (event: any) => {
           if (event.current.id) saveId(event.current.id);
-        });      });
+        });
+      });
     }
   }, [user]);
 
@@ -194,7 +197,8 @@ export function GChatApp() {
     if (!user) return;
     const { data: wallet } = await supabase.from("wallets").select("balance").eq("user_id", user.id).single();
     if (wallet) setWalletBalance(wallet.balance);
-    const { data: txs } = await supabase.from("transactions").select("*").or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`).order("created_at", { ascending: false }).limit(20);    if (txs) setTransactions(txs);
+    const { data: txs } = await supabase.from("transactions").select("*").or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`).order("created_at", { ascending: false }).limit(20);
+    if (txs) setTransactions(txs);
     const { data: ads } = await supabase.from("ad_campaigns").select("*").eq("is_active", true).limit(5);
     if (ads) setAvailableAds(ads);
   };
@@ -243,7 +247,8 @@ export function GChatApp() {
     }
   };
 
-  // Send message + trigger push notification  const sendMessage = async () => {
+  // Send message + trigger push notification
+  const sendMessage = async () => {
     if (!draft.trim()) return;
     
     const { data } = await supabase.from("messages").insert({ 
@@ -341,7 +346,8 @@ export function GChatApp() {
         const compressedFile = await imageCompression(profileAvatar, { maxSizeMB: 1, maxWidthOrHeight: 800 });
         const fileName = `${user.id}/avatar/${Date.now()}.${compressedFile.name.split('.').pop()}`;
         const { data: uploadData } = await supabase.storage.from("messages").upload(fileName, compressedFile);
-        if (uploadData) {          const { data: urlData } = supabase.storage.from("messages").getPublicUrl(uploadData.path);
+        if (uploadData) {
+          const { data: urlData } = supabase.storage.from("messages").getPublicUrl(uploadData.path);
           avatarUrl = urlData.publicUrl;
         }
       }
@@ -390,7 +396,8 @@ export function GChatApp() {
       if (error) throw error;
       
       await supabase.from("business_ai_settings").insert({
-        business_id: bizData.id,         auto_reply_enabled: !!autoReply, 
+        business_id: bizData.id,
+        auto_reply_enabled: !!autoReply, 
         ai_tone: "professional"
       });
       
@@ -439,7 +446,8 @@ export function GChatApp() {
     setAiSummary("🤖 AI is analyzing your chat...");
     setTimeout(() => { 
       setAiSummary(`🤖 AI Summary: You exchanged ${messages.length} messages.`); 
-    }, 1500);  };
+    }, 1500);
+  };
 
   const handleCreatePost = async () => {
     if (!postContent.trim() && !postImage) return;
@@ -488,7 +496,8 @@ export function GChatApp() {
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) return;
     try {
-      const { data } = await supabase.from("groups").insert({        name: newGroupName, 
+      const { data } = await supabase.from("groups").insert({
+        name: newGroupName, 
         description: newGroupDesc, 
         owner_id: user.id, 
         group_type: "group"
@@ -537,7 +546,8 @@ export function GChatApp() {
     const t = setTimeout(() => {
       if (searchUsername.trim().length >= 2) handleSearchUser();
       else setSearchResults([]);
-    }, 400);    return () => clearTimeout(t);
+    }, 400);
+    return () => clearTimeout(t);
   }, [searchUsername, showNewChat]);
 
   const handleCreateChat = async (target: any) => {
@@ -586,7 +596,8 @@ export function GChatApp() {
   
   if (!user) return null;
 
-  return (    <div className="relative min-h-screen w-full max-w-md mx-auto text-white overflow-hidden font-sans">
+  return (
+    <div className="relative min-h-screen w-full max-w-md mx-auto text-white overflow-hidden font-sans">
       <GChatBackground />
 
       {/* Render views based on state */}
@@ -635,7 +646,8 @@ export function GChatApp() {
       )}
       {view === "analytics" && profile && <AnalyticsView setView={setView} profile={profile} walletBalance={walletBalance} />}
       {view === "settings" && <SettingsView setView={setView} onLogout={() => supabase.auth.signOut()} />}
-      {view === "gtribe" && <GTribeView groups={groups} onCreateGroup={() => setShowCreateGroup(true)} />}      {view === "gchatone" && <GChatOneView businessProfile={businessProfile} onSetupBusiness={() => setShowBusinessSetup(true)} />}
+      {view === "gtribe" && <GTribeView groups={groups} onCreateGroup={() => setShowCreateGroup(true)} />}
+      {view === "gchatone" && <GChatOneView businessProfile={businessProfile} onSetupBusiness={() => setShowBusinessSetup(true)} />}
 
       {/* Notification Prompt */}
       <NotificationPrompt />
@@ -684,7 +696,8 @@ export function GChatApp() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-white truncate">{person.display_name || "User"}</p>
-                      <p className="text-xs text-gray-400 truncate">@{person.username}</p>                      {person.email && <p className="text-[10px] text-gray-500 truncate">{person.email}</p>}
+                      <p className="text-xs text-gray-400 truncate">@{person.username}</p>
+                      {person.email && <p className="text-[10px] text-gray-500 truncate">{person.email}</p>}
                     </div>
                     <button
                       onClick={() => handleCreateChat(person)}
@@ -733,7 +746,8 @@ export function GChatApp() {
             <div className="flex gap-2">
               <button onClick={() => setShowWithdraw(false)} className="flex-1 py-3 rounded-xl bg-white/5">
                 Cancel
-              </button>              <button 
+              </button>
+              <button 
                 onClick={handleWithdraw} 
                 disabled={isWithdrawing} 
                 className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 font-bold disabled:opacity-50"
@@ -782,7 +796,8 @@ export function GChatApp() {
         </div>
       )}
 
-      {showCreateGroup && (        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setShowCreateGroup(false)}>
+      {showCreateGroup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setShowCreateGroup(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">Create Group</h3>
             <input 
@@ -831,7 +846,8 @@ export function GChatApp() {
               <button 
                 onClick={() => document.getElementById('post-image-input')?.click()} 
                 className="flex-1 py-3 rounded-xl bg-white/5 flex items-center justify-center gap-2"
-              >                <ImageIcon className="h-5 w-5" /> 
+              >
+                <ImageIcon className="h-5 w-5" /> 
                 Photo
               </button>
               <button 
@@ -880,7 +896,8 @@ export function GChatApp() {
               </button>
             </div>
           </div>
-        </div>      )}
+        </div>
+      )}
 
       {watchingAd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
@@ -929,7 +946,8 @@ export function GChatApp() {
             onClick={() => setView("feed")} 
             className={`flex flex-col items-center gap-1 ${view === "feed" ? "text-cyan-400" : "text-gray-500"}`}
           >
-            <ImageIcon className="h-5 w-5" />            <span className="text-[9px]">Feed</span>
+            <ImageIcon className="h-5 w-5" />
+            <span className="text-[9px]">Feed</span>
           </button>
           <button 
             onClick={() => setView("wallet")} 
