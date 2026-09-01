@@ -725,7 +725,9 @@ export function FeedView(_: FeedViewProps) {
         <ImageIcon className="h-5 w-5" />
       </button>
 
-      {/* Composer */}
+      {/* ============================================================
+         COMPOSER — FIXED with VISIBLE Buttons
+         ============================================================ */}
       {composerOpen && (
         <div className="composer" onClick={() => !posting && setComposerOpen(false)}>
           <div className="composer-sheet" onClick={e => e.stopPropagation()}>
@@ -805,16 +807,27 @@ export function FeedView(_: FeedViewProps) {
               </div>
             )}
 
+            {/* ==========================================================
+               FIXED: Buttons are now VISIBLE with proper styling
+               ========================================================== */}
             <div className="flex gap-2 mt-3">
-              <button className="eng-btn" onClick={() => document.getElementById("gfeed-img")?.click()}>
+              {/* Photo Button */}
+              <button 
+                className="eng-btn" 
+                onClick={() => document.getElementById("gfeed-img")?.click()}
+              >
                 <ImageIcon className="h-4 w-4" /> Photo
               </button>
+              
+              {/* Poll Button */}
               <button
                 className={`eng-btn ${pollMode ? "text-[#FFD700]" : ""}`}
                 onClick={() => setPollMode(!pollMode)}
               >
                 <BarChart3 className="h-4 w-4" /> Poll
               </button>
+              
+              {/* POST BUTTON - BIG and VISIBLE */}
               <button
                 disabled={posting}
                 onClick={publish}
