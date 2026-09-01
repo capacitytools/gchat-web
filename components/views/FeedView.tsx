@@ -654,4 +654,197 @@ export function FeedView(_: FeedViewProps) {
                       <p className="text-[9px] text-[rgba(255,245,230,0.3)] mt-1">{timeAgo(c.created_at)}</p>
                     </div>
                     {cm.filter((r: any) => r.parent_id === c.id).map((r: any) => (
-                      <div key={r.id} className="cmt cmt
+                      <div key={r.id} className="cmt cmt-reply mt-1 p-2 rounded-xl bg-white/5 border border-white/10">
+                        <p className="text-[10px] font-bold text-[#00F0FF]">
+                          {r.profiles?.display_name || r.profiles?.username}
+                        </p>
+                        <p className="text-[12px] text-[#FFF5E6]">{r.content}</p>
+                      </div>
+                    ))}
+                    <button
+                      className="text-[10px] text-[rgba(255,245,230,0.5)] mt-1 hover:text-[rgba(255,245,230,0.8)] transition-colors"
+                      onClick={() => setReplyTo({ id: c.id, name: c.profiles?.display_name || "user" })}
+                    >
+                      Reply
+                    </button>
+                  </div>
+                ))}
+                {top.length > 3 && (
+                  <p className="text-[11px] text-[#00F0FF] cursor-pointer hover:underline">
+                    View all {top.length} comments
+                  </p>
+                )}
+
+                {/* Comment input */}
+                <div className="flex items-center gap-2 mt-1">
+                  {replyTo && (
+                    <span className="text-[10px] text-[#00F0FF] flex items-center gap-1">
+                      ↩ {replyTo.name}
+                      <button onClick={() => setReplyTo(null)} className="text-[rgba(255,245,230,0.3)] hover:text-[rgba(255,245,230,0.6)]">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                  <input
+                    value={draft}
+                    onChange={e => setDraft(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addComment(p.id)}
+                    placeholder={replyTo ? "Write a reply..." : "Add a comment..."}
+                    className="flex-1 rounded-full bg-white/5 border border-white/10 px-4 py-2 text-[13px] text-[#FFF5E6] outline-none focus:border-[rgba(255,215,0,0.3)] transition-colors"
+                  />
+                  <button className="eng-btn" onClick={() => setDraft(draft + "😊")}>
+                    <Smile className="h-4 w-4" />
+                  </button>
+                  <button
+                    className="eng-btn text-[#FFD700]"
+                    onClick={() => {
+                      if (recordingVoice === p.id) {
+                        stopVoiceRecording();
+                      } else {
+                        startVoiceRecording(p.id);
+                      }
+                    }}
+                  >
+                    <Mic className={`h-4 w-4 ${recordingVoice === p.id ? "text-[#FF2D95] animate-pulse" : ""}`} />
+                  </button>
+                  <button className="eng-btn text-[#FFD700]" onClick={() => addComment(p.id)}>
+                    <Send className="h-4 w-4" />
+                  </button>
+                </div>
+                {recordingVoice === p.id && (
+                  <p className="text-[10px] text-[#FF2D95] animate-pulse">🔴 Recording voice comment...</p>
+                )}
+              </div>
+            )}
+          </article>
+        );
+      })}
+
+      {/* FAB composer */}
+      <button className="gfeed-fab" aria-label="Create post" onClick={() => setComposerOpen(true)}>
+        <ImageIcon className="h-5 w-5" />
+      </button>
+
+      {/* Composer */}
+      {composerOpen && (
+        <div className="composer" onClick={() => !posting && setComposerOpen(false)}>
+          <div className="composer-sheet" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="gfeed-title text-base">Create Post</h3>
+              <button onClick={() => setComposerOpen(false)} className="p-2 rounded-full hover:bg-white/10">
+                <X className="h-5 w-5 text-[#FFF5E6]" />
+              </button>
+            </div>
+
+            {/* Mood Picker */}
+            <div className="flex gap-1 mb-3 overflow-x-auto scrollbar-none">
+              {MOODS.map(m => (
+                <button
+                  key={m}
+                  className={`text-[10px] px-2 py-1 rounded-full border transition-all whitespace-nowrap ${
+                    selectedMood === m.split(" ")[0] ?
+                      "border-[#FFD700] text-[#FFD700] bg-[rgba(255,215,0,0.1)]" :
+                      "border-[rgba(255,215,0,0.15)] text-[rgba(255,245,230,0.4)]"
+                  }`}
+                  onClick={() => setSelectedMood(m.split(" ")[0])}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={newText}
+              onChange={e => setNewText(e.target.value)}
+              placeholder="Share something beautiful..."
+              className="w-full h-24 rounded-xl bg-white/5 border border-[rgba(255,215,0,0.2)] px-4 py-3 text-[#FFF5E6] outline-none resize-none focus:border-[rgba(255,215,0,0.4)] transition-colors"
+            />
+
+            {newImgPrev && <img src={newImgPrev} className="post-media" alt="" />}
+
+            {/* Voice recording in composer */}
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                className={`eng-btn ${recordingVoice === "composer" ? "text-[#FF2D95]" : ""}`}
+                onClick={() => {
+                  if (recordingVoice === "composer") {
+                    stopVoiceRecording();
+                  } else {
+                    startVoiceRecording("composer");
+                    setRecordingVoice("composer");
+                  }
+                }}
+              >
+                <Mic className={`h-4 w-4 ${recordingVoice === "composer" ? "animate-pulse" : ""}`} />
+                {voiceDraft ? "🎤 Recorded" : "Voice"}
+              </button>
+              {voiceDraft && (
+                <span className="text-[10px] text-[rgba(255,245,230,0.4)]">Voice note ready</span>
+              )}
+            </div>
+
+            {pollMode && (
+              <div className="mt-2 space-y-2">
+                {pollOpts.map((o, i) => (
+                  <input
+                    key={i}
+                    value={o}
+                    onChange={e => setPollOpts(pollOpts.map((x, j) => j === i ? e.target.value : x))}
+                    placeholder={`Option ${i + 1}`}
+                    className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-[13px] text-[#FFF5E6] outline-none focus:border-[rgba(255,215,0,0.3)] transition-colors"
+                  />
+                ))}
+                {pollOpts.length < 4 && (
+                  <button
+                    className="text-[11px] text-[#00F0FF] hover:underline transition-colors"
+                    onClick={() => setPollOpts([...pollOpts, ""])}
+                  >
+                    + Add option
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2 mt-3">
+              <button className="eng-btn" onClick={() => document.getElementById("gfeed-img")?.click()}>
+                <ImageIcon className="h-4 w-4" /> Photo
+              </button>
+              <button
+                className={`eng-btn ${pollMode ? "text-[#FFD700]" : ""}`}
+                onClick={() => setPollMode(!pollMode)}
+              >
+                <BarChart3 className="h-4 w-4" /> Poll
+              </button>
+              <button
+                disabled={posting}
+                onClick={publish}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black font-bold text-sm disabled:opacity-50 hover:scale-105 transition-transform"
+              >
+                {posting ? "Posting..." : "Post ✨"}
+              </button>
+            </div>
+
+            <input
+              id="gfeed-img"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => {
+                const f = e.target.files?.[0];
+                if (f) { setNewImg(f); setNewImgPrev(URL.createObjectURL(f)); }
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {lightbox && (
+        <div className="lightbox" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="" />
+        </div>
+      )}
+
+      {toast && <div className="gfeed-toast">{toast}</div>}
+    </div>
+  );
+}
