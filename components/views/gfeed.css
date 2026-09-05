@@ -1,58 +1,5 @@
 /* ============================================================
-   FORCE FIX: Composer Buttons
-   ============================================================ */
-
-/* Make sure ALL composer buttons are visible */
-.composer-sheet button,
-.composer-sheet .eng-btn,
-.composer-sheet .flex-1,
-.composer-sheet .flex-1.py-2\\.5 {
-  display: flex !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-
-/* Fix the button container */
-.composer-sheet .flex.gap-2 {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 8px !important;
-  margin-top: 12px !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-
-/* Fix Photo button */
-.composer-sheet .eng-btn:has(.lucide-image) {
-  display: inline-flex !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-
-/* Fix Poll button */
-.composer-sheet .eng-btn:has(.lucide-bar-chart-3) {
-  display: inline-flex !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-
-/* Fix Post button */
-.composer-sheet .flex-1.py-2\\.5 {
-  display: flex !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-/* Fix hidden input */
-#gfeed-img {
-  display: block !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-/* ============================================================
-   G-FEED — THE MOST ADDICTIVE SOCIAL FEED
+   G-FEED — CLEAN & SIMPLE (Facebook Style)
    ============================================================ */
 
 /* ---------- Container ---------- */
@@ -114,43 +61,6 @@
 }
 .gfeed-tab:hover {
   color: #FFF5E6;
-}
-
-/* ---------- XP / Gamification ---------- */
-.xp-pill {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: rgba(255, 245, 230, .75);
-}
-.xp-bar {
-  width: 70px;
-  height: 4px;
-  background: rgba(255, 255, 255, .12);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.xp-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #FFD700, #00F0FF);
-  border-radius: 999px;
-  transition: width .6s ease;
-}
-.badge-chip {
-  display: inline-block;
-  margin-right: 6px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  color: #FFD700;
-  background: rgba(255, 215, 0, .1);
-  border: 1px solid rgba(255, 215, 0, .3);
-  animation: badgePulse 2s ease-in-out infinite;
-}
-@keyframes badgePulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
 }
 
 /* ---------- Post Card ---------- */
@@ -231,7 +141,7 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 2px solid #22c55e;
+  border: 2px solid rgba(255, 255, 255, .2);
   animation: ringPulse 2.4s ease-in-out infinite;
 }
 .ava-ring .ring.offline {
@@ -424,43 +334,14 @@
   to { opacity: 1; }
 }
 
-/* ---------- FAB ---------- */
-.gfeed-fab {
-  position: fixed;
-  right: 18px;
-  bottom: 88px;
-  z-index: 40;
-  width: 54px;
-  height: 54px;
-  border: none;
-  cursor: pointer;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #FFD700, #00F0FF);
-  transform: rotate(45deg);
-  box-shadow: 0 8px 26px rgba(255, 215, 0, .35);
-  animation: fabPulse 2.4s ease-in-out infinite;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform .3s ease;
-}
-.gfeed-fab:hover {
-  transform: rotate(45deg) scale(1.1);
-}
-.gfeed-fab svg {
-  transform: rotate(-45deg);
-  color: #0A1A0A;
-}
-@keyframes fabPulse {
-  0%, 100% { scale: 1; }
-  50% { scale: 1.08; }
-}
+/* ============================================================
+   COMPOSER — COMPLETE FIX
+   ============================================================ */
 
-/* ---------- Composer (FIXED - Buttons Visible) ---------- */
 .composer {
   position: fixed !important;
   inset: 0 !important;
-  z-index: 70 !important;
+  z-index: 999 !important;
   background: rgba(5, 10, 5, .92) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
@@ -468,82 +349,173 @@
   align-items: flex-end !important;
   justify-content: center !important;
   animation: fadeIn .25s ease !important;
+  padding: 0 16px !important;
 }
 
 .composer-sheet {
-  width: 100%;
-  max-width: 28rem;
-  background: #0c140c;
-  border: 1px solid rgba(255, 215, 0, .2);
-  border-bottom: none;
-  border-radius: 24px 24px 0 0;
-  padding: 18px 18px 30px;
-  max-height: 85vh;
-  overflow-y: auto;
-  padding-bottom: calc(30px + env(safe-area-inset-bottom));
+  width: 100% !important;
+  max-width: 560px !important;
+  background: #0c140c !important;
+  border: 1px solid rgba(255, 215, 0, .2) !important;
+  border-bottom: none !important;
+  border-radius: 24px 24px 0 0 !important;
+  padding: 20px 20px 30px !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+  margin-bottom: 0 !important;
+  position: relative !important;
 }
 
-/* Composer buttons - FORCED VISIBLE */
-.composer-sheet .flex.gap-2 {
+/* --- Profile Row --- */
+.composer-sheet .flex.items-center.gap-3 {
   display: flex !important;
-  gap: 8px !important;
-  margin-top: 12px !important;
-  flex-wrap: wrap !important;
-}
-
-.composer-sheet .eng-btn {
-  display: inline-flex !important;
   align-items: center !important;
-  gap: 6px !important;
-  padding: 8px 14px !important;
-  border-radius: 12px !important;
-  background: rgba(255, 255, 255, .06) !important;
-  border: 1px solid rgba(255, 255, 255, .08) !important;
-  color: rgba(255, 245, 230, .7) !important;
-  font-size: 12px !important;
-  cursor: pointer !important;
-  transition: all .2s ease !important;
+  gap: 12px !important;
+  margin-bottom: 12px !important;
+}
+
+.composer-sheet .w-10.h-10 {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 50% !important;
   flex-shrink: 0 !important;
-}
-
-.composer-sheet .eng-btn:hover {
-  background: rgba(255, 255, 255, .12) !important;
-  transform: translateY(-1px) !important;
-  border-color: rgba(255, 215, 0, .2) !important;
-}
-
-.composer-sheet .eng-btn.text-\[\#FFD700\] {
-  color: #FFD700 !important;
-}
-
-/* POST BUTTON - BIG and VISIBLE */
-.composer-sheet .flex-1.py-2\\.5 {
-  flex: 1 !important;
-  padding: 12px 20px !important;
-  border-radius: 12px !important;
-  background: linear-gradient(135deg, #FFD700, #00F0FF) !important;
-  color: #0A1A0A !important;
+  overflow: hidden !important;
+  background: linear-gradient(135deg, #0891b2, #7c3aed) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   font-weight: 700 !important;
+  font-size: 16px !important;
+  color: #fff !important;
+}
+
+.composer-sheet .text-sm.font-bold {
   font-size: 14px !important;
+  font-weight: 700 !important;
+  color: #FFF5E6 !important;
+}
+
+.composer-sheet .text-\[10px\] {
+  font-size: 10px !important;
+  color: rgba(255, 245, 230, .4) !important;
+}
+
+/* --- Text Area --- */
+.composer-sheet textarea {
+  width: 100% !important;
+  min-height: 80px !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 8px 4px !important;
+  color: #FFF5E6 !important;
+  font-size: 16px !important;
+  outline: none !important;
+  resize: none !important;
+  font-family: inherit !important;
+}
+
+.composer-sheet textarea::placeholder {
+  color: rgba(255, 245, 230, .3) !important;
+}
+
+/* --- Image Preview --- */
+.composer-sheet .relative.mt-2 {
+  position: relative !important;
+  margin-top: 8px !important;
+}
+
+.composer-sheet .relative.mt-2 img {
+  width: 100% !important;
+  max-height: 256px !important;
+  object-fit: cover !important;
+  border-radius: 12px !important;
+}
+
+.composer-sheet .absolute.top-2.right-2 {
+  position: absolute !important;
+  top: 8px !important;
+  right: 8px !important;
+  padding: 4px !important;
+  border-radius: 50% !important;
+  background: rgba(0, 0, 0, .7) !important;
+  color: #fff !important;
   border: none !important;
   cursor: pointer !important;
-  transition: transform .2s ease, opacity .2s ease !important;
+}
+
+/* --- Action Buttons Row --- */
+.composer-sheet .flex.flex-wrap.items-center.gap-1 {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 4px !important;
+  margin-top: 12px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid rgba(255, 255, 255, .06) !important;
+}
+
+.composer-sheet .flex.items-center.gap-2.px-3.py-1\\.5 {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 6px 12px !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: background .2s ease !important;
+  color: rgba(255, 245, 230, .7) !important;
+  font-size: 12px !important;
+}
+
+.composer-sheet .flex.items-center.gap-2.px-3.py-1\\.5:hover {
+  background: rgba(255, 255, 255, .05) !important;
+}
+
+.composer-sheet .flex.items-center.gap-2.px-3.py-1\\.5 .text-xs {
+  font-size: 11px !important;
+  color: rgba(255, 245, 230, .7) !important;
+}
+
+.composer-sheet .flex.items-center.gap-2.px-3.py-1\\.5 .h-4.w-4 {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* --- POST BUTTON — BIG AND VISIBLE --- */
+.composer-sheet .w-full.mt-4 {
+  width: 100% !important;
+  margin-top: 16px !important;
+  padding: 12px 0 !important;
+  border-radius: 12px !important;
+  border: none !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  cursor: pointer !important;
+  transition: all .2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   min-height: 48px !important;
-  min-width: 80px !important;
 }
 
-.composer-sheet .flex-1.py-2\\.5:hover:not(:disabled) {
-  transform: scale(1.02) !important;
-  box-shadow: 0 0 20px rgba(255, 215, 0, .3) !important;
-}
-
-.composer-sheet .flex-1.py-2\\.5:disabled {
-  opacity: 0.5 !important;
+.composer-sheet .w-full.mt-4:disabled {
+  background: rgba(255, 255, 255, .08) !important;
+  color: rgba(255, 245, 230, .3) !important;
   cursor: not-allowed !important;
 }
 
-.composer-sheet textarea {
-  min-height: 80px !important;
+.composer-sheet .w-full.mt-4:not(:disabled) {
+  background: linear-gradient(135deg, #FFD700, #00F0FF) !important;
+  color: #0A1A0A !important;
+}
+
+.composer-sheet .w-full.mt-4:not(:disabled):hover {
+  transform: scale(1.02) !important;
+}
+
+.composer-sheet .w-full.mt-4:not(:disabled):active {
+  transform: scale(0.98) !important;
 }
 
 /* ---------- Toast ---------- */
@@ -552,7 +524,7 @@
   bottom: 96px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 95;
+  z-index: 9999;
   padding: 10px 18px;
   border-radius: 999px;
   background: rgba(255, 215, 0, .15);
@@ -561,44 +533,6 @@
   color: #FFF5E6;
   font-size: 13px;
   animation: postIn .3s ease both;
-}
-
-/* ---------- Live Viewers ---------- */
-.live-viewers {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 8px;
-}
-.live-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 215, 0, .3);
-  overflow: hidden;
-  animation: floatUp 3s ease-in-out infinite;
-}
-.live-avatar:nth-child(2) { animation-delay: .5s; }
-.live-avatar:nth-child(3) { animation-delay: 1s; }
-@keyframes floatUp {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-
-/* ---------- Heat Map ---------- */
-.heat-map {
-  display: flex;
-  gap: 2px;
-  margin-top: 8px;
-  height: 20px;
-  align-items: flex-end;
-}
-.heat-bar {
-  flex: 1;
-  background: linear-gradient(180deg, #FFD700, #00F0FF);
-  border-radius: 2px;
-  transition: height .6s ease;
-  min-height: 2px;
 }
 
 /* ---------- Responsive ---------- */
@@ -615,14 +549,8 @@
     font-size: 11px;
   }
   .composer-sheet {
-    max-width: 100%;
-    border-radius: 20px 20px 0 0;
-    padding: 16px 16px 24px;
-  }
-  .composer-sheet .flex-1.py-2\\.5 {
-    padding: 10px 16px !important;
-    min-height: 44px !important;
-    font-size: 13px !important;
+    padding: 16px 16px 24px !important;
+    border-radius: 20px 20px 0 0 !important;
   }
 }
 
@@ -632,7 +560,6 @@
   .cmt,
   .rw-item > span,
   .burst i,
-  .gfeed-fab,
   .ava-ring .ring,
   .react-chip {
     animation: none !important;
