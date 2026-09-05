@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Heart, MessageCircle, Share2, Bookmark, Eye, Send, Smile, MoreHorizontal,
   X, Image as ImageIcon, Music, UserPlus, MapPin, Sparkles, MessageSquare,
-  Calendar, Video, Loader2, DollarSign
+  Calendar, Video, Loader2, DollarSign, ThumbsUp, Laugh, Angry, Frown, Heart as HeartIcon
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { NatureBackground } from "../NatureBackground";
@@ -65,58 +65,90 @@ export function FeedView(_: FeedViewProps) {
 
   // ---- LOAD ----
   const load = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    setMe(user.id);
-
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("display_name, username, avatar_url")
-      .eq("id", user.id)
-      .single();
-    setProfile(prof);
-
-    const { data: p } = await supabase
-      .from("posts")
-      .select("*, profiles:user_id(id, username, display_name, avatar_url, badges)")
-      .eq("post_type", "post")
-      .order("created_at", { ascending: false })
-      .limit(30);
-    
-    if (!p) return;
-    const ids = p.map((x: any) => x.id);
-
-    const [r, c, b, l, t] = await Promise.all([
-      supabase.from("post_reactions").select("*").in("post_id", ids),
-      supabase.from("post_comments").select("*, profiles:user_id(username, display_name, avatar_url)").in("post_id", ids).order("created_at", { ascending: true }),
-      supabase.from("post_bookmarks").select("post_id").eq("user_id", user.id).in("post_id", ids),
-      supabase.from("post_likes").select("*").in("post_id", ids),
-      supabase.from("post_tips").select("*").in("post_id", ids),
-    ]);
-
-    const myChats = await supabase.from("chat_members").select("chat_id").eq("user_id", user.id);
-    const cids = (myChats.data || []).map((x: any) => x.chat_id);
-    let fids: string[] = [];
-    if (cids.length) {
-      const mem = await supabase.from("chat_members").select("user_id").in("chat_id", cids).neq("user_id", user.id);
-      fids = (mem.data || []).map((x: any) => x.user_id);
-    }
-
-    setReactions(r.data || []);
-    setComments(c.data || []);
-    setBookmarks((b.data || []).map((x: any) => x.post_id));
-    setLikes(l.data || []);
-    setTips(t.data || []);
-    setFriendIds(fids);
-    setPosts(p);
-
-    p.slice(0, 10).forEach((post: any) => {
-      const k = `gc_v_${post.id}`;
-      if (!localStorage.getItem(k)) {
-        localStorage.setItem(k, "1");
-        supabase.rpc("bump_post", { target: post.id, field: "views" }).then(() => {});
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log("No user logged in");
+        return;
       }
-    });
+      setMe(user.id);
+
+      // Get profile
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("display_name, username, avatar_url")
+        .eq("id", user.id)
+        .single();
+      setProfile(prof);
+
+      // Get posts with profiles
+      const { data: p, error: postsError } = await supabase
+        .from("posts")
+        .select(`
+          *,
+          profiles:user_id (
+            id,
+            username,
+            display_name,
+            avatar_url,
+            badges
+          )
+        `)
+        .eq("post_type", "post")
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (postsError) {
+        console.error("Posts fetch error:", postsError);
+        return;
+      }
+
+      if (!p || p.length === 0) {
+        console.log("No posts found");
+        setPosts([]);
+        return;
+      }
+
+      console.log("Posts loaded:", p.length);
+      const ids = p.map((x: any) => x.id);
+
+      // Fetch reactions, comments, likes, bookmarks, tips
+      const [r, c, b, l, t] = await Promise.all([
+        supabase.from("post_reactions").select("*").in("post_id", ids),
+        supabase.from("post_comments").select("*, profiles:user_id(username, display_name, avatar_url)").in("post_id", ids).order("created_at", { ascending: true }),
+        supabase.from("post_bookmarks").select("post_id").eq("user_id", user.id).in("post_id", ids),
+        supabase.from("post_likes").select("*").in("post_id", ids),
+        supabase.from("post_tips").select("*").in("post_id", ids),
+      ]);
+
+      // Get friend IDs
+      const myChats = await supabase.from("chat_members").select("chat_id").eq("user_id", user.id);
+      const cids = (myChats.data || []).map((x: any) => x.chat_id);
+      let fids: string[] = [];
+      if (cids.length) {
+        const mem = await supabase.from("chat_members").select("user_id").in("chat_id", cids).neq("user_id", user.id);
+        fids = (mem.data || []).map((x: any) => x.user_id);
+      }
+
+      setReactions(r.data || []);
+      setComments(c.data || []);
+      setBookmarks((b.data || []).map((x: any) => x.post_id));
+      setLikes(l.data || []);
+      setTips(t.data || []);
+      setFriendIds(fids);
+      setPosts(p);
+
+      // Count views
+      p.slice(0, 10).forEach((post: any) => {
+        const k = `gc_v_${post.id}`;
+        if (!localStorage.getItem(k)) {
+          localStorage.setItem(k, "1");
+          supabase.rpc("bump_post", { target: post.id, field: "views" }).then(() => {});
+        }
+      });
+    } catch (err) {
+      console.error("Load error:", err);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -176,11 +208,47 @@ export function FeedView(_: FeedViewProps) {
     setTipPost(null);
   };
 
-  const share = async (p: any) => {
-    try { await navigator.clipboard.writeText(p.content || "Check this out on G-Chat!"); } catch {}
-    supabase.rpc("bump_post", { target: p.id, field: "shares" }).then(() => {});
-    setPosts(posts.map(x => x.id === p.id ? { ...x, shares: (x.shares || 0) + 1 } : x));
-    say("Shared — content copied ✨");
+  // ---- SHARE WITH PREVIEW ----
+  const sharePost = async (p: any) => {
+    const postContent = p.content || "Check out this post on G-Chat!";
+    const author = p.profiles?.display_name || p.profiles?.username || "Someone";
+    const shareText = `${author} shared: ${postContent.substring(0, 100)}${postContent.length > 100 ? '...' : ''}`;
+    const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://gchat.vercel.app';
+    const imageUrl = p.media_url || 'https://gchat.vercel.app/og-image.png';
+    
+    // Build share data
+    const shareData = {
+      title: `G-Chat - ${author}`,
+      text: shareText,
+      url: shareUrl,
+    };
+
+    // Try Web Share API first (mobile)
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        supabase.rpc("bump_post", { target: p.id, field: "shares" }).then(() => {});
+        setPosts(posts.map(x => x.id === p.id ? { ...x, shares: (x.shares || 0) + 1 } : x));
+        say("Shared successfully! 🌟");
+        return;
+      } catch (e) {
+        if ((e as any).name !== 'AbortError') {
+          console.error("Share error:", e);
+        }
+        return;
+      }
+    }
+
+    // Fallback: Copy to clipboard with nice formatting
+    try {
+      const copyText = `${shareText}\n\nView on G-Chat: ${shareUrl}`;
+      await navigator.clipboard.writeText(copyText);
+      supabase.rpc("bump_post", { target: p.id, field: "shares" }).then(() => {});
+      setPosts(posts.map(x => x.id === p.id ? { ...x, shares: (x.shares || 0) + 1 } : x));
+      say("📋 Link copied to clipboard! Share it anywhere.");
+    } catch (e) {
+      say("Share failed. Please copy the link manually.");
+    }
   };
 
   const toggleBookmark = async (id: string) => {
@@ -246,7 +314,9 @@ export function FeedView(_: FeedViewProps) {
       setNewImg(null);
       setNewImgPrev(null);
       say("Posted to G-Feed 🌿");
-      load();
+      
+      // Reload posts
+      await load();
       
     } catch (e: any) {
       console.error("Publish error:", e);
@@ -314,7 +384,7 @@ export function FeedView(_: FeedViewProps) {
                 <span className="ring offline" />
                 <span className="face">
                   {author.avatar_url ? <img src={author.avatar_url} className="w-full h-full object-cover" alt="" /> :
-                    (author.display_name || "U").charAt(0).toUpperCase()}
+                    (author.display_name || author.username || "U").charAt(0).toUpperCase()}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
@@ -336,7 +406,7 @@ export function FeedView(_: FeedViewProps) {
 
             {/* Reactions display */}
             {Object.keys(rxCount).length > 0 && (
-              <div className="mt-2">
+              <div className="mt-2 flex flex-wrap gap-1">
                 {Object.entries(rxCount).slice(0, 4).map(([e, n]) => (
                   <span key={e} className="react-chip">{e} {n}</span>
                 ))}
@@ -378,7 +448,7 @@ export function FeedView(_: FeedViewProps) {
                 <MessageCircle className="h-4 w-4" /> {cm.length}
               </button>
 
-              <button className="eng-btn" onClick={() => share(p)}>
+              <button className="eng-btn" onClick={() => sharePost(p)}>
                 <Share2 className="h-4 w-4" /> {p.shares || 0}
               </button>
 
@@ -413,7 +483,7 @@ export function FeedView(_: FeedViewProps) {
                   <div key={c.id} className="cmt">
                     <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
                       <p className="text-[11px] font-bold text-[#FFD700]">
-                        {c.profiles?.display_name || c.profiles?.username}
+                        {c.profiles?.display_name || c.profiles?.username || "User"}
                       </p>
                       <p className="text-[13px] text-[#FFF5E6]">{c.content}</p>
                     </div>
@@ -459,13 +529,13 @@ export function FeedView(_: FeedViewProps) {
       })}
 
       {/* ============================================================
-         COMPOSER — POST BUTTON AT TOP (VISIBLE & ROUNDED)
+         COMPOSER — POST BUTTON AT TOP
          ============================================================ */}
       {composerOpen && (
         <div className="composer" onClick={() => !posting && setComposerOpen(false)}>
           <div className="composer-sheet" onClick={e => e.stopPropagation()}>
             
-            {/* POST BUTTON — TOP, CLEARLY VISIBLE, FULLY ROUNDED */}
+            {/* POST BUTTON — TOP */}
             <button
               disabled={isPostDisabled}
               onClick={publish}
@@ -484,7 +554,6 @@ export function FeedView(_: FeedViewProps) {
               )}
             </button>
 
-            {/* Divider */}
             <div className="border-b border-[rgba(255,255,255,0.06)] my-4" />
 
             {/* Header */}
