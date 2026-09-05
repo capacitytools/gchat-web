@@ -63,12 +63,44 @@ export function FeedView(_: FeedViewProps) {
 
   const say = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2200); };
 
-  // ---- LOAD - USING THE WORKING QUERY FORMAT ----
-  const load = async () => {
+  // ---- GET FRIENDS/CONTACTS ----
+  const getFriendIds = async (userId: string): Promise<string[]> => {
+    try {
+      // Get all chats the user is in
+      const { data: chatMembers } = await supabase
+        .from("chat_members")
+        .select("chat_id")
+        .eq("user_id", userId);
+
+      if (!chatMembers || chatMembers.length === 0) return [];
+
+      const chatIds = chatMembers.map((cm: any) => cm.chat_id);
+
+      // Get other members in those chats
+      const { data: otherMembers } = await supabase
+        .from("chat_members")
+        .select("user_id")
+        .in("chat_id", chatIds)
+        .neq("user_id", userId);
+
+      if (!otherMembers) return [];
+
+      // Remove duplicates
+      const uniqueFriendIds = [...new Set(otherMembers.map((m: any) => m.user_id))];
+      console.log("👥 Friends found:", uniqueFriendIds.length);
+      return uniqueFriendIds;
+    } catch (err) {
+      console.error("Error fetching friends:", err);
+      return [];
+    }
+  };
+
+  // ---- LOAD POSTS WITH VISIBILITY ----
+  const loadPosts = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.log("No user logged in");
+        console.log("❌ No user logged in");
         return;
       }
       setMe(user.id);
@@ -81,28 +113,38 @@ export function FeedView(_: FeedViewProps) {
         .single();
       setProfile(prof);
 
-      // 🔥 FIXED: Use the EXACT same query format that worked before
+      // Get friends
+      const friends = await getFriendIds(user.id);
+      setFriendIds(friends);
+
+      // Build visible user IDs = [me + friends]
+      const visibleUserIds = [user.id, ...friends];
+      console.log("👤 Current user:", user.id);
+      console.log("👥 Visible user IDs:", visibleUserIds.length);
+
+      // Fetch posts from visible users
       const { data: p, error: postsError } = await supabase
         .from("posts")
         .select("*, profiles:user_id(id, username, display_name, avatar_url, badges)")
         .eq("post_type", "post")
+        .in("user_id", visibleUserIds)
         .order("created_at", { ascending: false })
         .limit(50);
 
       if (postsError) {
-        console.error("Posts fetch error:", postsError);
+        console.error("❌ Posts fetch error:", postsError);
         return;
       }
 
       if (!p || p.length === 0) {
-        console.log("No posts found");
+        console.log("📭 No posts found");
         setPosts([]);
         return;
       }
 
       console.log("✅ Posts loaded:", p.length);
-      console.log("📝 First post:", p[0]);
-      
+      console.log("📝 First post:", p[0]?.content?.substring(0, 30) || "No content");
+
       const ids = p.map((x: any) => x.id);
 
       // Fetch reactions, comments, likes, bookmarks, tips
@@ -114,21 +156,11 @@ export function FeedView(_: FeedViewProps) {
         supabase.from("post_tips").select("*").in("post_id", ids),
       ]);
 
-      // Get friend IDs
-      const myChats = await supabase.from("chat_members").select("chat_id").eq("user_id", user.id);
-      const cids = (myChats.data || []).map((x: any) => x.chat_id);
-      let fids: string[] = [];
-      if (cids.length) {
-        const mem = await supabase.from("chat_members").select("user_id").in("chat_id", cids).neq("user_id", user.id);
-        fids = (mem.data || []).map((x: any) => x.user_id);
-      }
-
       setReactions(r.data || []);
       setComments(c.data || []);
       setBookmarks((b.data || []).map((x: any) => x.post_id));
       setLikes(l.data || []);
       setTips(t.data || []);
-      setFriendIds(fids);
       setPosts(p);
 
       // Count views
@@ -139,12 +171,13 @@ export function FeedView(_: FeedViewProps) {
           supabase.rpc("bump_post", { target: post.id, field: "views" }).then(() => {});
         }
       });
+
     } catch (err) {
-      console.error("Load error:", err);
+      console.error("❌ Load error:", err);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { loadPosts(); }, []);
 
   // ---- HELPERS ----
   const likesOf = (id: string) => likes.filter(l => l.post_id === id);
@@ -249,7 +282,7 @@ export function FeedView(_: FeedViewProps) {
     }
   };
 
-  // ---- PUBLISH ----
+  // ---- PUBLISH WITH IMMEDIATE DISPLAY ----
   const publish = async () => {
     const hasContent = newText.trim().length > 0 || newImg !== null;
     
@@ -262,6 +295,7 @@ export function FeedView(_: FeedViewProps) {
     let mediaUrl = null;
     
     try {
+      // 1. Upload image if exists
       if (newImg) {
         const fileExt = newImg.name.split('.').pop();
         const fileName = `${me}/posts/${Date.now()}.${fileExt}`;
@@ -271,7 +305,7 @@ export function FeedView(_: FeedViewProps) {
           .upload(fileName, newImg);
           
         if (uploadError) {
-          throw new Error(uploadError.message);
+          throw new Error(`Image upload failed: ${uploadError.message}`);
         }
         
         if (uploadData) {
@@ -282,6 +316,7 @@ export function FeedView(_: FeedViewProps) {
         }
       }
 
+      // 2. Create post data
       const postData: any = {
         user_id: me,
         content: newText.trim() || "📷 Photo post",
@@ -289,23 +324,36 @@ export function FeedView(_: FeedViewProps) {
       };
       if (mediaUrl) postData.media_url = mediaUrl;
 
-      const { error: insertError } = await supabase
+      console.log("📝 Inserting post:", postData);
+
+      // 3. Insert and return the created post
+      const { data: createdPost, error: insertError } = await supabase
         .from("posts")
-        .insert(postData);
+        .insert(postData)
+        .select("*, profiles:user_id(id, username, display_name, avatar_url, badges)")
+        .single();
 
-      if (insertError) throw new Error(insertError.message);
+      if (insertError) {
+        console.error("❌ Insert error:", insertError);
+        throw new Error(`Database insert failed: ${insertError.message}`);
+      }
 
+      console.log("✅ Post created successfully:", createdPost.id);
+      console.log("📝 Post content:", createdPost.content?.substring(0, 30));
+
+      // 4. Add to state immediately (prepend)
+      setPosts(prev => [createdPost, ...prev]);
+
+      // 5. Reset composer
       setComposerOpen(false);
       setNewText("");
       setNewImg(null);
       setNewImgPrev(null);
+      
       say("Posted to G-Feed 🌿");
       
-      // 🔥 CRITICAL: Reload posts
-      await load();
-      
     } catch (e: any) {
-      console.error("Publish error:", e);
+      console.error("❌ Publish error:", e);
       say(`Post failed: ${e.message || 'Unknown error'}`);
     }
     setPosting(false);
