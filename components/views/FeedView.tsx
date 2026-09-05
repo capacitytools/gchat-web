@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Heart, MessageCircle, Share2, Bookmark, Eye, Send, Smile, MoreHorizontal,
   X, Image as ImageIcon, Music, UserPlus, MapPin, Sparkles, MessageSquare,
-  Calendar, Video, Loader2
+  Calendar, Video, Loader2, DollarSign
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { NatureBackground } from "../NatureBackground";
