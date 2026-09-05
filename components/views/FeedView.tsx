@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { NatureBackground } from "../NatureBackground";
-import imageCompression from "browser-image-compression";
 import "./gfeed.css";
 
 const EMOJIS = ["❤️", "🔥", "⭐", "💎", "🎉", "🤯", "👏", "😂"];
@@ -59,7 +58,6 @@ export function FeedView(_: FeedViewProps) {
   const [newImg, setNewImg] = useState<File | null>(null);
   const [newImgPrev, setNewImgPrev] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
-  const [showMoreOptions, setShowMoreOptions] = useState(false);
   const holdTimer = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -71,7 +69,6 @@ export function FeedView(_: FeedViewProps) {
     if (!user) return;
     setMe(user.id);
 
-    // Get profile
     const { data: prof } = await supabase
       .from("profiles")
       .select("display_name, username, avatar_url")
@@ -79,7 +76,6 @@ export function FeedView(_: FeedViewProps) {
       .single();
     setProfile(prof);
 
-    // Get posts
     const { data: p } = await supabase
       .from("posts")
       .select("*, profiles:user_id(id, username, display_name, avatar_url, badges)")
@@ -114,7 +110,6 @@ export function FeedView(_: FeedViewProps) {
     setFriendIds(fids);
     setPosts(p);
 
-    // Count views
     p.slice(0, 10).forEach((post: any) => {
       const k = `gc_v_${post.id}`;
       if (!localStorage.getItem(k)) {
@@ -200,9 +195,12 @@ export function FeedView(_: FeedViewProps) {
     }
   };
 
-  // ---- PUBLISH (Clean & Simple) ----
+  // ---- PUBLISH (Fixed: Button always clickable when text or image exists) ----
   const publish = async () => {
-    if (!newText.trim() && !newImg) {
+    // Check if there's content
+    const hasContent = newText.trim().length > 0 || newImg !== null;
+    
+    if (!hasContent) {
       say("Please add some content or an image");
       return;
     }
@@ -233,7 +231,7 @@ export function FeedView(_: FeedViewProps) {
 
       const postData: any = {
         user_id: me,
-        content: newText.trim(),
+        content: newText.trim() || "📷 Photo post",
         post_type: "post",
       };
       if (mediaUrl) postData.media_url = mediaUrl;
@@ -265,6 +263,10 @@ export function FeedView(_: FeedViewProps) {
   if (tab === "trending") feed.sort((a, b) => score(b) - score(a));
   if (tab === "friends") feed = feed.filter(p => friendIds.includes(p.user_id) || p.user_id === me);
   if (tab === "explore") feed = feed.filter(p => !friendIds.includes(p.user_id) && p.user_id !== me);
+
+  // Check if post button should be enabled
+  const hasContent = newText.trim().length > 0 || newImg !== null;
+  const isPostDisabled = posting || !hasContent;
 
   return (
     <div className="gfeed-wrap">
@@ -456,7 +458,7 @@ export function FeedView(_: FeedViewProps) {
       })}
 
       {/* ============================================================
-         COMPOSER — CLEAN & SIMPLE (Like Facebook)
+         COMPOSER — FIXED with Working POST Button
          ============================================================ */}
       {composerOpen && (
         <div className="composer" onClick={() => !posting && setComposerOpen(false)}>
@@ -561,11 +563,15 @@ export function FeedView(_: FeedViewProps) {
               </button>
             </div>
 
-            {/* POST Button */}
+            {/* POST Button — FIXED: Always clickable when content exists */}
             <button
-              disabled={posting || (!newText.trim() && !newImg)}
+              disabled={isPostDisabled}
               onClick={publish}
-              className="w-full mt-4 py-2.5 rounded-xl bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black font-bold text-sm disabled:opacity-50 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              className={`w-full mt-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+                isPostDisabled 
+                  ? "bg-[rgba(255,255,255,0.1)] text-[rgba(255,245,230,0.3)] cursor-not-allowed" 
+                  : "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black hover:scale-[1.02] active:scale-[0.98]"
+              }`}
             >
               {posting ? (
                 <span className="flex items-center justify-center gap-2">
