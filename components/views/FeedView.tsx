@@ -195,9 +195,8 @@ export function FeedView(_: FeedViewProps) {
     }
   };
 
-  // ---- PUBLISH (Fixed: Button always clickable when text or image exists) ----
+  // ---- PUBLISH ----
   const publish = async () => {
-    // Check if there's content
     const hasContent = newText.trim().length > 0 || newImg !== null;
     
     if (!hasContent) {
@@ -264,7 +263,6 @@ export function FeedView(_: FeedViewProps) {
   if (tab === "friends") feed = feed.filter(p => friendIds.includes(p.user_id) || p.user_id === me);
   if (tab === "explore") feed = feed.filter(p => !friendIds.includes(p.user_id) && p.user_id !== me);
 
-  // Check if post button should be enabled
   const hasContent = newText.trim().length > 0 || newImg !== null;
   const isPostDisabled = posting || !hasContent;
 
@@ -276,7 +274,10 @@ export function FeedView(_: FeedViewProps) {
       <div className="gfeed-head">
         <div className="flex items-center justify-between">
           <h1 className="gfeed-title">G-Feed</h1>
-          <button onClick={() => setComposerOpen(true)} className="px-4 py-1.5 rounded-full bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black text-sm font-bold">
+          <button 
+            onClick={() => setComposerOpen(true)} 
+            className="px-4 py-1.5 rounded-full bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black text-sm font-bold"
+          >
             Create Post
           </button>
         </div>
@@ -458,7 +459,7 @@ export function FeedView(_: FeedViewProps) {
       })}
 
       {/* ============================================================
-         COMPOSER — FIXED with Working POST Button
+         COMPOSER — COMPLETE FIXED VERSION
          ============================================================ */}
       {composerOpen && (
         <div className="composer" onClick={() => !posting && setComposerOpen(false)}>
@@ -466,14 +467,17 @@ export function FeedView(_: FeedViewProps) {
             {/* Header */}
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-[#FFF5E6]">Create Post</h3>
-              <button onClick={() => setComposerOpen(false)} className="p-2 rounded-full hover:bg-white/10">
+              <button 
+                onClick={() => setComposerOpen(false)} 
+                className="p-2 rounded-full hover:bg-white/10 transition-colors"
+              >
                 <X className="h-5 w-5 text-[#FFF5E6]" />
               </button>
             </div>
 
             {/* Profile Row */}
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center font-bold text-white overflow-hidden">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center font-bold text-white overflow-hidden flex-shrink-0">
                 {profile?.avatar_url ? (
                   <img src={profile.avatar_url} className="w-full h-full object-cover" alt="" />
                 ) : (
@@ -491,16 +495,20 @@ export function FeedView(_: FeedViewProps) {
               value={newText}
               onChange={e => setNewText(e.target.value)}
               placeholder="What's on your mind?"
-              className="w-full h-24 rounded-xl bg-transparent px-2 py-2 text-[#FFF5E6] text-base outline-none resize-none placeholder-[rgba(255,245,230,0.4)]"
+              className="w-full min-h-[80px] rounded-xl bg-transparent px-2 py-2 text-[#FFF5E6] text-base outline-none resize-none placeholder-[rgba(255,245,230,0.3)]"
             />
 
             {/* Image Preview */}
             {newImgPrev && (
               <div className="relative mt-2">
-                <img src={newImgPrev} className="w-full max-h-64 object-cover rounded-xl" alt="" />
+                <img 
+                  src={newImgPrev} 
+                  className="w-full max-h-64 object-cover rounded-xl" 
+                  alt="Preview" 
+                />
                 <button
                   onClick={() => { setNewImg(null); setNewImgPrev(null); }}
-                  className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-white"
+                  className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-white hover:bg-black/90 transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -508,7 +516,7 @@ export function FeedView(_: FeedViewProps) {
             )}
 
             {/* Action Buttons Row */}
-            <div className="flex flex-wrap items-center gap-1 mt-3 border-t border-[rgba(255,255,255,0.06)] pt-3">
+            <div className="flex flex-wrap items-center gap-1 mt-3 pt-3 border-t border-[rgba(255,255,255,0.06)]">
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
@@ -527,50 +535,73 @@ export function FeedView(_: FeedViewProps) {
                 }}
               />
 
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" onClick={() => say("Music feature coming soon 🎵")}>
+              <button 
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" 
+                onClick={() => say("Music feature coming soon 🎵")}
+              >
                 <Music className="h-4 w-4 text-[#F02849]" />
                 <span className="text-xs text-[rgba(255,245,230,0.7)]">Music</span>
               </button>
 
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" onClick={() => say("Tag people coming soon")}>
+              <button 
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" 
+                onClick={() => say("Tag people coming soon")}
+              >
                 <UserPlus className="h-4 w-4 text-[#1877F2]" />
                 <span className="text-xs text-[rgba(255,245,230,0.7)]">Tag people</span>
               </button>
 
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" onClick={() => say("Add location coming soon")}>
+              <button 
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" 
+                onClick={() => say("Add location coming soon")}
+              >
                 <MapPin className="h-4 w-4 text-[#F3425F]" />
                 <span className="text-xs text-[rgba(255,245,230,0.7)]">Add location</span>
               </button>
 
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" onClick={() => say("Feeling/activity coming soon")}>
+              <button 
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" 
+                onClick={() => say("Feeling/activity coming soon")}
+              >
                 <Sparkles className="h-4 w-4 text-[#F7B928]" />
                 <span className="text-xs text-[rgba(255,245,230,0.7)]">Feeling/activity</span>
               </button>
 
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" onClick={() => say("Get messages coming soon")}>
+              <button 
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" 
+                onClick={() => say("Get messages coming soon")}
+              >
                 <MessageSquare className="h-4 w-4 text-[#1877F2]" />
                 <span className="text-xs text-[rgba(255,245,230,0.7)]">Get messages</span>
               </button>
 
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" onClick={() => say("Create event coming soon")}>
+              <button 
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" 
+                onClick={() => say("Create event coming soon")}
+              >
                 <Calendar className="h-4 w-4 text-[#F02849]" />
                 <span className="text-xs text-[rgba(255,245,230,0.7)]">Create event</span>
               </button>
 
-              <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" onClick={() => say("Go live coming soon")}>
+              <button 
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/5 transition-colors" 
+                onClick={() => say("Go live coming soon")}
+              >
                 <Video className="h-4 w-4 text-[#F02849]" />
                 <span className="text-xs text-[rgba(255,245,230,0.7)]">Go live</span>
               </button>
             </div>
 
-            {/* POST Button — FIXED: Always clickable when content exists */}
+            {/* ==========================================================
+               POST BUTTON — FULLY VISIBLE AND FUNCTIONAL
+               ========================================================== */}
             <button
               disabled={isPostDisabled}
               onClick={publish}
-              className={`w-full mt-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+              className={`w-full mt-4 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center min-h-[48px] ${
                 isPostDisabled 
-                  ? "bg-[rgba(255,255,255,0.1)] text-[rgba(255,245,230,0.3)] cursor-not-allowed" 
-                  : "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black hover:scale-[1.02] active:scale-[0.98]"
+                  ? "bg-[rgba(255,255,255,0.08)] text-[rgba(255,245,230,0.3)] cursor-not-allowed" 
+                  : "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-[rgba(255,215,0,0.2)]"
               }`}
             >
               {posting ? (
