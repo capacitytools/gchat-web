@@ -459,13 +459,36 @@ export function FeedView(_: FeedViewProps) {
       })}
 
       {/* ============================================================
-         COMPOSER — COMPLETE FIXED VERSION
+         COMPOSER — POST BUTTON AT TOP (VISIBLE & ROUNDED)
          ============================================================ */}
       {composerOpen && (
         <div className="composer" onClick={() => !posting && setComposerOpen(false)}>
           <div className="composer-sheet" onClick={e => e.stopPropagation()}>
+            
+            {/* POST BUTTON — TOP, CLEARLY VISIBLE, FULLY ROUNDED */}
+            <button
+              disabled={isPostDisabled}
+              onClick={publish}
+              className={`w-full py-3 rounded-xl font-bold text-base transition-all flex items-center justify-center min-h-[52px] ${
+                isPostDisabled 
+                  ? "bg-[rgba(255,255,255,0.08)] text-[rgba(255,245,230,0.3)] cursor-not-allowed" 
+                  : "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-[rgba(255,215,0,0.25)]"
+              }`}
+            >
+              {posting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" /> Posting...
+                </span>
+              ) : (
+                "POST"
+              )}
+            </button>
+
+            {/* Divider */}
+            <div className="border-b border-[rgba(255,255,255,0.06)] my-4" />
+
             {/* Header */}
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-3">
               <h3 className="text-lg font-bold text-[#FFF5E6]">Create Post</h3>
               <button 
                 onClick={() => setComposerOpen(false)} 
@@ -592,26 +615,6 @@ export function FeedView(_: FeedViewProps) {
               </button>
             </div>
 
-            {/* ==========================================================
-               POST BUTTON — FULLY VISIBLE AND FUNCTIONAL
-               ========================================================== */}
-            <button
-              disabled={isPostDisabled}
-              onClick={publish}
-              className={`w-full mt-4 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center min-h-[48px] ${
-                isPostDisabled 
-                  ? "bg-[rgba(255,255,255,0.08)] text-[rgba(255,245,230,0.3)] cursor-not-allowed" 
-                  : "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-[rgba(255,215,0,0.2)]"
-              }`}
-            >
-              {posting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Posting...
-                </span>
-              ) : (
-                "POST"
-              )}
-            </button>
           </div>
         </div>
       )}
