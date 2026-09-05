@@ -63,7 +63,7 @@ export function FeedView(_: FeedViewProps) {
 
   const say = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2200); };
 
-  // ---- LOAD ----
+  // ---- LOAD - USING THE WORKING QUERY FORMAT ----
   const load = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -81,21 +81,11 @@ export function FeedView(_: FeedViewProps) {
         .single();
       setProfile(prof);
 
-      // Get ALL posts - REMOVED is_published filter
+      // 🔥 FIXED: Use the EXACT same query format that worked before
       const { data: p, error: postsError } = await supabase
         .from("posts")
-        .select(`
-          *,
-          profiles:user_id (
-            id,
-            username,
-            display_name,
-            avatar_url,
-            badges
-          )
-        `)
+        .select("*, profiles:user_id(id, username, display_name, avatar_url, badges)")
         .eq("post_type", "post")
-        // .eq("is_published", true)  // <-- REMOVED THIS LINE
         .order("created_at", { ascending: false })
         .limit(50);
 
@@ -110,7 +100,9 @@ export function FeedView(_: FeedViewProps) {
         return;
       }
 
-      console.log("Posts loaded:", p.length);
+      console.log("✅ Posts loaded:", p.length);
+      console.log("📝 First post:", p[0]);
+      
       const ids = p.map((x: any) => x.id);
 
       // Fetch reactions, comments, likes, bookmarks, tips
@@ -209,25 +201,19 @@ export function FeedView(_: FeedViewProps) {
     setTipPost(null);
   };
 
-  // ---- SHARE WITH PREVIEW ----
   const sharePost = async (p: any) => {
     const postContent = p.content || "Check out this post on G-Chat!";
     const author = p.profiles?.display_name || p.profiles?.username || "Someone";
     const shareText = `${author} shared: ${postContent.substring(0, 100)}${postContent.length > 100 ? '...' : ''}`;
     const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://gchat.vercel.app';
-    const imageUrl = p.media_url || 'https://gchat.vercel.app/og-image.png';
     
-    // Build share data
-    const shareData = {
-      title: `G-Chat - ${author}`,
-      text: shareText,
-      url: shareUrl,
-    };
-
-    // Try Web Share API first (mobile)
     if (navigator.share) {
       try {
-        await navigator.share(shareData);
+        await navigator.share({
+          title: `G-Chat - ${author}`,
+          text: shareText,
+          url: shareUrl,
+        });
         supabase.rpc("bump_post", { target: p.id, field: "shares" }).then(() => {});
         setPosts(posts.map(x => x.id === p.id ? { ...x, shares: (x.shares || 0) + 1 } : x));
         say("Shared successfully! 🌟");
@@ -240,15 +226,14 @@ export function FeedView(_: FeedViewProps) {
       }
     }
 
-    // Fallback: Copy to clipboard with nice formatting
     try {
       const copyText = `${shareText}\n\nView on G-Chat: ${shareUrl}`;
       await navigator.clipboard.writeText(copyText);
       supabase.rpc("bump_post", { target: p.id, field: "shares" }).then(() => {});
       setPosts(posts.map(x => x.id === p.id ? { ...x, shares: (x.shares || 0) + 1 } : x));
-      say("📋 Link copied to clipboard! Share it anywhere.");
+      say("📋 Link copied to clipboard!");
     } catch (e) {
-      say("Share failed. Please copy the link manually.");
+      say("Share failed.");
     }
   };
 
@@ -316,7 +301,7 @@ export function FeedView(_: FeedViewProps) {
       setNewImgPrev(null);
       say("Posted to G-Feed 🌿");
       
-      // Reload posts
+      // 🔥 CRITICAL: Reload posts
       await load();
       
     } catch (e: any) {
@@ -530,7 +515,7 @@ export function FeedView(_: FeedViewProps) {
       })}
 
       {/* ============================================================
-         COMPOSER — POST BUTTON AT TOP
+         COMPOSER
          ============================================================ */}
       {composerOpen && (
         <div className="composer" onClick={() => !posting && setComposerOpen(false)}>
