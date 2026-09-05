@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Heart, MessageCircle, Share2, Bookmark, Eye, Send, Smile, MoreHorizontal,
   X, Image as ImageIcon, Music, UserPlus, MapPin, Sparkles, MessageSquare,
-  Calendar, Video, Loader2, DollarSign, ThumbsUp, Laugh, Angry, Frown, Heart as HeartIcon
+  Calendar, Video, Loader2, DollarSign
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { NatureBackground } from "../NatureBackground";
@@ -81,7 +81,7 @@ export function FeedView(_: FeedViewProps) {
         .single();
       setProfile(prof);
 
-      // Get posts with profiles
+      // Get ALL posts - REMOVED is_published filter
       const { data: p, error: postsError } = await supabase
         .from("posts")
         .select(`
@@ -95,6 +95,7 @@ export function FeedView(_: FeedViewProps) {
           )
         `)
         .eq("post_type", "post")
+        // .eq("is_published", true)  // <-- REMOVED THIS LINE
         .order("created_at", { ascending: false })
         .limit(50);
 
