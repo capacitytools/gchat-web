@@ -1,5 +1,5 @@
 /* ============================================================
-   CONVERSATION VIEW — FIXED
+   CONVERSATION VIEW — COMPLETE
    ============================================================ */
 
 .conversation-wrap {
@@ -39,11 +39,7 @@
   gap: 2px;
 }
 
-/* Message bubbles */
-.conv-messages .flex {
-  animation: messageIn .3s ease both;
-}
-
+/* Message animations */
 @keyframes messageIn {
   from {
     opacity: 0;
@@ -53,6 +49,10 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+.animate-messageIn {
+  animation: messageIn .3s ease both;
 }
 
 /* Input area */
@@ -68,7 +68,7 @@
   flex-shrink: 0;
 }
 
-/* Scrollbar styling */
+/* Scrollbar */
 .conv-messages::-webkit-scrollbar {
   width: 4px;
 }
