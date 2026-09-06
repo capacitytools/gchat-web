@@ -200,6 +200,13 @@ export function ConversationView({
     setShowOptions(false);
   };
 
+  // Handle image click with null check
+  const handleImageClick = (url: string | null) => {
+    if (url) {
+      window.open(url, "_blank");
+    }
+  };
+
   return (
     <div className="conversation-wrap">
       <NatureBackground />
@@ -386,7 +393,7 @@ export function ConversationView({
                           src={msg.media_url}
                           className="max-w-full max-h-60 rounded-lg mb-1 cursor-pointer"
                           alt="Message attachment"
-                          onClick={() => window.open(msg.media_url, "_blank")}
+                          onClick={() => handleImageClick(msg.media_url)}
                         />
                       )}
                       {msg.text && <p className="text-sm break-words">{msg.text}</p>}
