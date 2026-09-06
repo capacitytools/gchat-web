@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, Send, Image as ImageIcon, Mic, Smile, MoreVertical,
-  Paperclip, Phone, Video, DollarSign, Sparkles, Loader2
+  Paperclip, Phone, Video, DollarSign, Sparkles, Loader2,
+  Pin, Trash2, BellOff, Archive, UserPlus, Flag
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { NatureBackground } from "../NatureBackground";
@@ -28,6 +29,7 @@ type Profile = {
 
 interface ConversationViewProps {
   setView: (view: any) => void;
+  activeChatId: string;
   activeChatName: string;
   messages: Message[];
   userId: string;
@@ -37,10 +39,16 @@ interface ConversationViewProps {
   onSendMoney: () => void;
   onAISummary: () => void;
   aiSummary: string | null;
+  onDeleteChat: (chatId: string) => void;
+  onPinChat: (chatId: string) => void;
+  onPinContact: (contactId: string) => void;
+  isPinned: boolean;
+  isContactPinned: boolean;
 }
 
 export function ConversationView({
   setView,
+  activeChatId,
   activeChatName,
   messages,
   userId,
@@ -50,24 +58,31 @@ export function ConversationView({
   onSendMoney,
   onAISummary,
   aiSummary,
+  onDeleteChat,
+  onPinChat,
+  onPinContact,
+  isPinned,
+  isContactPinned,
 }: ConversationViewProps) {
   const supabase = createClient();
   const [otherUser, setOtherUser] = useState<Profile | null>(null);
   const [isOnline, setIsOnline] = useState(false);
   const [typing, setTyping] = useState(false);
   const [localMessages, setLocalMessages] = useState<Message[]>(messages);
+  const [showOptions, setShowOptions] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const optionsRef = useRef<HTMLDivElement>(null);
 
   // Get other user's profile
   useEffect(() => {
     const getOtherUser = async () => {
       try {
-        // Get current chat members
         const { data: members } = await supabase
           .from("chat_members")
           .select("user_id")
-          .eq("chat_id", messages[0]?.chat_id || "");
+          .eq("chat_id", activeChatId);
 
         if (members) {
           const otherUserId = members.find((m: any) => m.user_id !== userId)?.user_id;
@@ -87,8 +102,10 @@ export function ConversationView({
       }
     };
 
-    getOtherUser();
-  }, [messages, userId]);
+    if (activeChatId) {
+      getOtherUser();
+    }
+  }, [activeChatId, userId]);
 
   // Update local messages when prop changes
   useEffect(() => {
@@ -100,15 +117,25 @@ export function ConversationView({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [localMessages]);
 
-  // Simulate online status (random for demo)
+  // Simulate online status
   useEffect(() => {
     setIsOnline(Math.random() > 0.3);
+  }, []);
+
+  // Close options when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (optionsRef.current && !optionsRef.current.contains(event.target as Node)) {
+        setShowOptions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const handleSend = () => {
     if (!draft.trim()) return;
     onSendMessage();
-    // Simulate typing indicator
     setTyping(true);
     setTimeout(() => setTyping(false), 2000);
   };
@@ -152,9 +179,26 @@ export function ConversationView({
     groupedMessages[groupedMessages.length - 1].messages.push(msg);
   });
 
-  // --- Message Sending (Will be handled by parent) ---
-  // The parent component (gchat-app.tsx) handles the actual send
-  // This component just displays messages
+  // Handle delete conversation
+  const handleDeleteChat = () => {
+    onDeleteChat(activeChatId);
+    setShowDeleteConfirm(false);
+    setView("list");
+  };
+
+  // Handle pin chat
+  const handlePinChat = () => {
+    onPinChat(activeChatId);
+    setShowOptions(false);
+  };
+
+  // Handle pin contact
+  const handlePinContact = () => {
+    if (otherUser) {
+      onPinContact(otherUser.id);
+    }
+    setShowOptions(false);
+  };
 
   return (
     <div className="conversation-wrap">
@@ -182,13 +226,18 @@ export function ConversationView({
               {isOnline && (
                 <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#0A1A0A]" />
               )}
+              {isContactPinned && (
+                <span className="absolute -top-1 -right-1 text-[10px]">📌</span>
+              )}
             </div>
             <div>
-              <p className="text-sm font-bold text-[#FFF5E6]">
+              <p className="text-sm font-bold text-[#FFF5E6] flex items-center gap-1">
                 {otherUser?.display_name || activeChatName || "User"}
+                {isContactPinned && <Pin className="h-3 w-3 text-[#FFD700]" />}
               </p>
               <p className="text-[10px] text-[rgba(255,245,230,0.4)]">
                 {isOnline ? "Online" : "Offline"}
+                {isPinned && " · 📌 Pinned"}
               </p>
             </div>
           </div>
@@ -207,11 +256,72 @@ export function ConversationView({
           >
             <Sparkles className="h-5 w-5 text-[#FFD700]" />
           </button>
-          <button className="p-2 rounded-full hover:bg-white/10 transition-colors">
-            <MoreVertical className="h-5 w-5 text-[#FFF5E6]" />
-          </button>
+
+          {/* More Options */}
+          <div className="relative" ref={optionsRef}>
+            <button
+              onClick={() => setShowOptions(!showOptions)}
+              className="p-2 rounded-full hover:bg-white/10 transition-colors"
+            >
+              <MoreVertical className="h-5 w-5 text-[#FFF5E6]" />
+            </button>
+
+            {showOptions && (
+              <div className="absolute right-0 top-full mt-1 w-48 bg-[#0c140c] border border-[rgba(255,215,0,0.15)] rounded-xl shadow-lg overflow-hidden z-50">
+                <button
+                  onClick={handlePinChat}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-sm text-[#FFF5E6] hover:bg-white/5 transition-colors"
+                >
+                  <Pin className="h-4 w-4 text-[#FFD700]" />
+                  {isPinned ? "Unpin Chat" : "Pin Chat"}
+                </button>
+
+                <button
+                  onClick={handlePinContact}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-sm text-[#FFF5E6] hover:bg-white/5 transition-colors"
+                >
+                  <UserPlus className="h-4 w-4 text-[#00F0FF]" />
+                  {isContactPinned ? "Unpin Contact" : "Pin Contact"}
+                </button>
+
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-sm text-[#FF2D95] hover:bg-white/5 transition-colors border-t border-[rgba(255,255,255,0.05)]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Conversation
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Delete Confirmation */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-[#0c140c] border border-[rgba(255,215,0,0.2)] p-6">
+            <h3 className="text-lg font-bold text-[#FFF5E6] mb-2">Delete Conversation?</h3>
+            <p className="text-sm text-[rgba(255,245,230,0.6)] mb-6">
+              This will delete the entire conversation for you. This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-3 rounded-xl bg-white/5 text-[#FFF5E6] font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteChat}
+                className="flex-1 py-3 rounded-xl bg-[#FF2D95] text-white font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI Summary */}
       {aiSummary && (
@@ -248,7 +358,9 @@ export function ConversationView({
                 return (
                   <div
                     key={msg.id}
-                    className={`flex items-end gap-2 mb-1 ${isMine ? "justify-end" : "justify-start"}`}
+                    className={`flex items-end gap-2 mb-1 animate-messageIn ${
+                      isMine ? "justify-end" : "justify-start"
+                    }`}
                   >
                     {!isMine && showAvatar && (
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center font-bold text-white text-xs overflow-hidden flex-shrink-0">
@@ -261,11 +373,12 @@ export function ConversationView({
                     )}
                     {!isMine && !showAvatar && <div className="w-8 flex-shrink-0" />}
 
+                    {/* Message bubble */}
                     <div
                       className={`max-w-[75%] px-4 py-2.5 rounded-2xl ${
                         isMine
-                          ? "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black rounded-br-sm"
-                          : "bg-[rgba(255,255,255,0.06)] text-[#FFF5E6] rounded-bl-sm border border-[rgba(255,255,255,0.06)]"
+                          ? "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black rounded-br-sm shadow-lg shadow-[rgba(255,215,0,0.15)]"
+                          : "bg-emerald-500/20 text-[#FFF5E6] rounded-bl-sm border border-emerald-500/20 shadow-lg shadow-emerald-500/10"
                       }`}
                     >
                       {msg.media_url && (
@@ -279,6 +392,11 @@ export function ConversationView({
                       {msg.text && <p className="text-sm break-words">{msg.text}</p>}
                       <p className={`text-[9px] mt-1 ${isMine ? "text-black/60" : "text-[rgba(255,245,230,0.4)]"}`}>
                         {formatTime(msg.created_at)}
+                        {isMine && (
+                          <span className="ml-2">
+                            {msg.status === "sent" ? "✓" : "✓✓"}
+                          </span>
+                        )}
                       </p>
                     </div>
 
@@ -337,7 +455,7 @@ export function ConversationView({
             disabled={!draft.trim()}
             className={`p-2 rounded-full transition-all ${
               draft.trim()
-                ? "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black hover:scale-105"
+                ? "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black hover:scale-105 shadow-lg shadow-[rgba(255,215,0,0.2)]"
                 : "bg-[rgba(255,255,255,0.05)] text-[rgba(255,245,230,0.3)] cursor-not-allowed"
             }`}
           >
