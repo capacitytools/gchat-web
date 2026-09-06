@@ -21,6 +21,7 @@ interface Props {
   chats: Chat[];
   onOpenChat: (c: Chat) => void;
   onNewChat: () => void;
+  refreshChats?: () => void;
 }
 
 /* ---------- helpers ---------- */
@@ -56,7 +57,7 @@ const STARTERS: string[] = [
   "What's one win you had this week? 🎉",
 ];
 
-/* ---------- Living Orb (exported for bottom nav) ---------- */
+/* ---------- Living Orb ---------- */
 export function LivingOrb({ active, unread = 0 }: { active?: boolean; unread?: number }) {
   const p = Math.min(unread, 8) / 8;
   return (
@@ -69,7 +70,7 @@ export function LivingOrb({ active, unread = 0 }: { active?: boolean; unread?: n
   );
 }
 
-export function ChatsListView({ setView, chats, onOpenChat }: Props) {
+export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshChats }: Props) {
   const supabase = createClient();
   const [me, setMe] = useState<string>("");
   const [enriched, setEnriched] = useState<Enriched[]>([]);
@@ -81,6 +82,7 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
   const [summaryId, setSummaryId] = useState<string | null>(null);
   const [actionsId, setActionsId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [isCreatingChat, setIsCreatingChat] = useState<boolean>(false);
   const touch = useRef<{ x: number; id: string } | null>(null);
 
   const say = (m: string): void => { setToast(m); setTimeout(() => setToast(null), 2200); };
@@ -90,7 +92,7 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
     supabase.auth.getUser().then(({ data }) => data.user && setMe(data.user.id));
   }, [supabase]);
 
-  /* enrich chats with real message data */
+  /* enrich chats */
   useEffect(() => {
     if (!me) return;
     if (!chats.length) { setEnriched([]); return; }
@@ -117,12 +119,17 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
           archived: archived.includes(c.id), score, mood: moodOf(last?.text), streak: streakOf(msgs),
           online: age < 300000, lastFew: msgs.slice(-5).map((m: any) => m.text).filter(Boolean),
         };
-      }).sort((a: Enriched, b: Enriched) => b.score - a.score);
+      }).sort((a: Enriched, b: Enriched) => {
+        // Pinned first, then by score
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return b.score - a.score;
+      });
       setEnriched(list);
     })();
   }, [chats, me, supabase]);
 
-  /* suggestions + radar (real profiles) */
+  /* suggestions + radar */
   useEffect(() => {
     if (!me) return;
     (async () => {
@@ -133,7 +140,7 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
     })();
   }, [me, supabase]);
 
-  /* smart search (name / username / email) */
+  /* smart search */
   useEffect(() => {
     const t = setTimeout(async () => {
       const q = term.trim();
@@ -147,16 +154,94 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
     return () => clearTimeout(t);
   }, [term, me, supabase]);
 
+  // ============================================================
+  // FIXED: startChatWith — Creates chat and navigates
+  // ============================================================
   const startChatWith = async (person: any): Promise<void> => {
-    const { data: chat, error } = await supabase.from("chats")
-      .insert({ name: `Chat with ${person.display_name || person.username}`, created_by: me }).select().single();
-    if (error || !chat) { say("Could not create chat"); return; }
-    await supabase.from("chat_members").insert([
-      { chat_id: chat.id, user_id: me, role: "owner" },
-      { chat_id: chat.id, user_id: person.id, role: "member" },
-    ]);
-    setHubOpen(false);
-    onOpenChat({ id: chat.id, name: chat.name, updated_at: chat.created_at });
+    if (isCreatingChat) return;
+    setIsCreatingChat(true);
+    
+    try {
+      // Check if chat already exists with this person
+      const { data: existingMembers, error: memberError } = await supabase
+        .from("chat_members")
+        .select("chat_id")
+        .eq("user_id", me);
+
+      if (memberError) throw memberError;
+
+      let existingChatId: string | null = null;
+
+      // Check if any chat has both users
+      if (existingMembers && existingMembers.length > 0) {
+        const chatIds = existingMembers.map((m: any) => m.chat_id);
+        const { data: otherMembers } = await supabase
+          .from("chat_members")
+          .select("chat_id")
+          .in("chat_id", chatIds)
+          .eq("user_id", person.id);
+
+        if (otherMembers && otherMembers.length > 0) {
+          existingChatId = otherMembers[0].chat_id;
+        }
+      }
+
+      let chatId: string;
+      let chatName: string;
+
+      if (existingChatId) {
+        // Use existing chat
+        chatId = existingChatId;
+        chatName = `Chat with ${person.display_name || person.username}`;
+        say("Chat already exists! Opening...");
+      } else {
+        // Create new chat
+        const { data: newChat, error: chatError } = await supabase
+          .from("chats")
+          .insert({
+            name: `Chat with ${person.display_name || person.username}`,
+            created_by: me
+          })
+          .select()
+          .single();
+
+        if (chatError || !newChat) {
+          throw new Error(chatError?.message || "Failed to create chat");
+        }
+
+        // Add both members
+        const { error: insertError } = await supabase
+          .from("chat_members")
+          .insert([
+            { chat_id: newChat.id, user_id: me, role: "owner" },
+            { chat_id: newChat.id, user_id: person.id, role: "member" }
+          ]);
+
+        if (insertError) {
+          // Rollback: delete the chat if member insertion fails
+          await supabase.from("chats").delete().eq("id", newChat.id);
+          throw new Error(insertError.message);
+        }
+
+        chatId = newChat.id;
+        chatName = newChat.name;
+
+        // Refresh chat list
+        if (refreshChats) {
+          await refreshChats();
+        }
+      }
+
+      // Close hub and open conversation
+      setHubOpen(false);
+      onOpenChat({ id: chatId, name: chatName, updated_at: new Date().toISOString() });
+      
+    } catch (error: any) {
+      console.error("Error starting chat:", error);
+      say("Failed to start chat: " + (error.message || "Unknown error"));
+    } finally {
+      setIsCreatingChat(false);
+    }
   };
 
   const markRead = (id: string): void => {
@@ -165,9 +250,6 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
     say("Marked as read ✓");
   };
 
-  // ============================================================
-  // FIXED: toggleLS with proper TypeScript types
-  // ============================================================
   const toggleLS = (key: string, id: string, field: "pinned" | "muted" | "archived"): void => {
     const arr: string[] = readLS(key, []);
     const on: boolean = arr.includes(id);
@@ -181,10 +263,12 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
 
   return (
     <div className="relative z-10 flex flex-col min-h-screen">
-      {/* Header with Spark button */}
+      {/* Header */}
       <header className="sticky top-0 z-20 bg-[#0A1A0A]/85 backdrop-blur-xl border-b border-[rgba(255,215,0,0.15)] px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={() => setView("home")} className="p-2 rounded-full hover:bg-white/5"><ArrowLeft className="h-5 w-5 text-[#FFF5E6]" /></button>
+          <button onClick={() => setView("home")} className="p-2 rounded-full hover:bg-white/5">
+            <ArrowLeft className="h-5 w-5 text-[#FFF5E6]" />
+          </button>
           <h1 className="text-xl font-bold hub-title">Chats</h1>
         </div>
         <button className="spark-btn" aria-label="Open Connection Hub" onClick={() => setHubOpen(true)}>
@@ -193,7 +277,7 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
         </button>
       </header>
 
-      {/* Living conversation list */}
+      {/* Chat list */}
       <div className="hub-list">
         {visible.length === 0 && (
           <div className="text-center py-20 text-[rgba(255,245,230,0.5)]">
@@ -239,7 +323,7 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
               </div>
             </div>
 
-            {/* Swipe right → AI summary */}
+            {/* Summary panel */}
             {summaryId === c.id && (
               <div className="liv-panel">
                 <Sparkles className="inline h-3.5 w-3.5 text-[#00F0FF] mr-1" />
@@ -247,25 +331,37 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
               </div>
             )}
 
-            {/* Swipe left → actions */}
+            {/* Actions panel */}
             {actionsId === c.id && (
               <div className="liv-actions">
-                <button onClick={() => toggleLS("gc_pinned", c.id, "pinned")}><Pin className="h-4 w-4 text-[#FFD700]" />{c.pinned ? "Unpin" : "Pin"}</button>
-                <button onClick={() => toggleLS("gc_muted", c.id, "muted")}><BellOff className="h-4 w-4" />{c.muted ? "Unmute" : "Mute"}</button>
-                <button onClick={() => { toggleLS("gc_archived", c.id, "archived"); say("Archived"); }}><Archive className="h-4 w-4" />Archive</button>
-                <button onClick={() => markRead(c.id)}><Zap className="h-4 w-4 text-[#00F0FF]" />Read</button>
+                <button onClick={() => toggleLS("gc_pinned", c.id, "pinned")}>
+                  <Pin className="h-4 w-4 text-[#FFD700]" />{c.pinned ? "Unpin" : "Pin"}
+                </button>
+                <button onClick={() => toggleLS("gc_muted", c.id, "muted")}>
+                  <BellOff className="h-4 w-4" />{c.muted ? "Unmute" : "Mute"}
+                </button>
+                <button onClick={() => { toggleLS("gc_archived", c.id, "archived"); say("Archived"); }}>
+                  <Archive className="h-4 w-4" />Archive
+                </button>
+                <button onClick={() => markRead(c.id)}>
+                  <Zap className="h-4 w-4 text-[#00F0FF]" />Read
+                </button>
               </div>
             )}
           </div>
         ))}
       </div>
 
-      {/* ============ CONNECTION HUB ============ */}
+      {/* ============================================================
+         CONNECTION HUB — FIXED
+         ============================================================ */}
       {hubOpen && (
         <div className="hub-overlay">
           <header className="sticky top-0 z-10 bg-[#0A1A0A]/90 backdrop-blur-xl px-4 py-3 flex items-center justify-between border-b border-[rgba(255,215,0,0.15)]">
             <h2 className="hub-title text-lg">✦ Connection Hub</h2>
-            <button onClick={() => setHubOpen(false)} className="p-2 rounded-full hover:bg-white/10"><X className="h-5 w-5 text-[#FFF5E6]" /></button>
+            <button onClick={() => setHubOpen(false)} className="p-2 rounded-full hover:bg-white/10">
+              <X className="h-5 w-5 text-[#FFF5E6]" />
+            </button>
           </header>
 
           <div className="hub-scroll">
@@ -307,7 +403,13 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
                     <p className="text-sm text-[#FFF5E6] truncate">{p.display_name}</p>
                     <p className="text-[10px] text-[rgba(255,245,230,0.5)] truncate">@{p.username} · {p.email}</p>
                   </div>
-                  <button onClick={() => startChatWith(p)} className="px-3 py-1.5 rounded-lg bg-[#FFD700] text-black text-xs font-bold">Chat</button>
+                  <button 
+                    onClick={() => startChatWith(p)} 
+                    disabled={isCreatingChat}
+                    className="px-3 py-1.5 rounded-lg bg-[#FFD700] text-black text-xs font-bold disabled:opacity-50"
+                  >
+                    {isCreatingChat ? "..." : "Chat"}
+                  </button>
                 </div>
               ))}
             </section>
@@ -323,7 +425,13 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
                     </div>
                     <p className="text-xs text-[#FFF5E6] mt-2 truncate">{p.display_name || p.username}</p>
                     <p className="compat">⚡ {p.compat}% compatible</p>
-                    <button onClick={() => startChatWith(p)} className="mt-2 px-3 py-1 rounded-lg bg-white/10 text-[10px] text-[#FFF5E6]">Connect</button>
+                    <button 
+                      onClick={() => startChatWith(p)}
+                      disabled={isCreatingChat}
+                      className="mt-2 px-3 py-1 rounded-lg bg-white/10 text-[10px] text-[#FFF5E6] disabled:opacity-50"
+                    >
+                      {isCreatingChat ? "..." : "Connect"}
+                    </button>
                   </div>
                 ))}
               </div>
