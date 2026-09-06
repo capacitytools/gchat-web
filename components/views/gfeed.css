@@ -2,10 +2,30 @@
    G-FEED — CLEAN & SIMPLE (Facebook Style)
    ============================================================ */
 
-/* ---------- Container ---------- */
+/* ---------- FIX: Feed appears ABOVE NatureBackground ---------- */
 .gfeed-wrap {
   position: relative;
   z-index: 10;
+}
+
+/* Make sure background is behind everything */
+.nature-bg {
+  z-index: 0 !important;
+}
+
+/* Posts stay above background */
+.post-card {
+  position: relative;
+  z-index: 15;
+}
+
+/* Composer stays on top */
+.composer {
+  z-index: 999 !important;
+}
+
+/* ---------- Container ---------- */
+.gfeed-wrap {
   min-height: 100vh;
   padding-bottom: 96px;
   overflow-x: hidden;
@@ -334,10 +354,7 @@
   to { opacity: 1; }
 }
 
-/* ============================================================
-   COMPOSER — COMPLETE FIX
-   ============================================================ */
-
+/* ---------- Composer ---------- */
 .composer {
   position: fixed !important;
   inset: 0 !important;
@@ -482,7 +499,7 @@
   height: 16px !important;
 }
 
-/* --- POST BUTTON — BIG AND VISIBLE --- */
+/* --- POST BUTTON --- */
 .composer-sheet .w-full.mt-4 {
   width: 100% !important;
   margin-top: 16px !important;
