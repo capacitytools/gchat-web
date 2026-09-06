@@ -66,7 +66,6 @@ export function FeedView(_: FeedViewProps) {
   // ---- GET FRIENDS/CONTACTS ----
   const getFriendIds = async (userId: string): Promise<string[]> => {
     try {
-      // Get all chats the user is in
       const { data: chatMembers } = await supabase
         .from("chat_members")
         .select("chat_id")
@@ -76,7 +75,6 @@ export function FeedView(_: FeedViewProps) {
 
       const chatIds = chatMembers.map((cm: any) => cm.chat_id);
 
-      // Get other members in those chats
       const { data: otherMembers } = await supabase
         .from("chat_members")
         .select("user_id")
@@ -85,9 +83,7 @@ export function FeedView(_: FeedViewProps) {
 
       if (!otherMembers) return [];
 
-      // Remove duplicates
       const uniqueFriendIds = [...new Set(otherMembers.map((m: any) => m.user_id))];
-      console.log("👥 Friends found:", uniqueFriendIds.length);
       return uniqueFriendIds;
     } catch (err) {
       console.error("Error fetching friends:", err);
@@ -95,17 +91,16 @@ export function FeedView(_: FeedViewProps) {
     }
   };
 
-  // ---- LOAD POSTS WITH VISIBILITY ----
+  // ---- LOAD POSTS ----
   const loadPosts = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.log("❌ No user logged in");
+        console.log("No user logged in");
         return;
       }
       setMe(user.id);
 
-      // Get profile
       const { data: prof } = await supabase
         .from("profiles")
         .select("display_name, username, avatar_url")
@@ -113,16 +108,11 @@ export function FeedView(_: FeedViewProps) {
         .single();
       setProfile(prof);
 
-      // Get friends
       const friends = await getFriendIds(user.id);
       setFriendIds(friends);
 
-      // Build visible user IDs = [me + friends]
       const visibleUserIds = [user.id, ...friends];
-      console.log("👤 Current user:", user.id);
-      console.log("👥 Visible user IDs:", visibleUserIds.length);
 
-      // Fetch posts from visible users
       const { data: p, error: postsError } = await supabase
         .from("posts")
         .select("*, profiles:user_id(id, username, display_name, avatar_url, badges)")
@@ -132,22 +122,17 @@ export function FeedView(_: FeedViewProps) {
         .limit(50);
 
       if (postsError) {
-        console.error("❌ Posts fetch error:", postsError);
+        console.error("Posts fetch error:", postsError);
         return;
       }
 
       if (!p || p.length === 0) {
-        console.log("📭 No posts found");
         setPosts([]);
         return;
       }
 
-      console.log("✅ Posts loaded:", p.length);
-      console.log("📝 First post:", p[0]?.content?.substring(0, 30) || "No content");
-
       const ids = p.map((x: any) => x.id);
 
-      // Fetch reactions, comments, likes, bookmarks, tips
       const [r, c, b, l, t] = await Promise.all([
         supabase.from("post_reactions").select("*").in("post_id", ids),
         supabase.from("post_comments").select("*, profiles:user_id(username, display_name, avatar_url)").in("post_id", ids).order("created_at", { ascending: true }),
@@ -163,7 +148,6 @@ export function FeedView(_: FeedViewProps) {
       setTips(t.data || []);
       setPosts(p);
 
-      // Count views
       p.slice(0, 10).forEach((post: any) => {
         const k = `gc_v_${post.id}`;
         if (!localStorage.getItem(k)) {
@@ -173,7 +157,7 @@ export function FeedView(_: FeedViewProps) {
       });
 
     } catch (err) {
-      console.error("❌ Load error:", err);
+      console.error("Load error:", err);
     }
   };
 
@@ -282,7 +266,7 @@ export function FeedView(_: FeedViewProps) {
     }
   };
 
-  // ---- PUBLISH WITH IMMEDIATE DISPLAY ----
+  // ---- PUBLISH ----
   const publish = async () => {
     const hasContent = newText.trim().length > 0 || newImg !== null;
     
@@ -295,7 +279,6 @@ export function FeedView(_: FeedViewProps) {
     let mediaUrl = null;
     
     try {
-      // 1. Upload image if exists
       if (newImg) {
         const fileExt = newImg.name.split('.').pop();
         const fileName = `${me}/posts/${Date.now()}.${fileExt}`;
@@ -316,7 +299,6 @@ export function FeedView(_: FeedViewProps) {
         }
       }
 
-      // 2. Create post data
       const postData: any = {
         user_id: me,
         content: newText.trim() || "📷 Photo post",
@@ -324,9 +306,6 @@ export function FeedView(_: FeedViewProps) {
       };
       if (mediaUrl) postData.media_url = mediaUrl;
 
-      console.log("📝 Inserting post:", postData);
-
-      // 3. Insert and return the created post
       const { data: createdPost, error: insertError } = await supabase
         .from("posts")
         .insert(postData)
@@ -334,17 +313,11 @@ export function FeedView(_: FeedViewProps) {
         .single();
 
       if (insertError) {
-        console.error("❌ Insert error:", insertError);
         throw new Error(`Database insert failed: ${insertError.message}`);
       }
 
-      console.log("✅ Post created successfully:", createdPost.id);
-      console.log("📝 Post content:", createdPost.content?.substring(0, 30));
-
-      // 4. Add to state immediately (prepend)
       setPosts(prev => [createdPost, ...prev]);
 
-      // 5. Reset composer
       setComposerOpen(false);
       setNewText("");
       setNewImg(null);
@@ -353,7 +326,7 @@ export function FeedView(_: FeedViewProps) {
       say("Posted to G-Feed 🌿");
       
     } catch (e: any) {
-      console.error("❌ Publish error:", e);
+      console.error("Publish error:", e);
       say(`Post failed: ${e.message || 'Unknown error'}`);
     }
     setPosting(false);
@@ -562,14 +535,11 @@ export function FeedView(_: FeedViewProps) {
         );
       })}
 
-      {/* ============================================================
-         COMPOSER
-         ============================================================ */}
+      {/* COMPOSER */}
       {composerOpen && (
         <div className="composer" onClick={() => !posting && setComposerOpen(false)}>
           <div className="composer-sheet" onClick={e => e.stopPropagation()}>
             
-            {/* POST BUTTON — TOP */}
             <button
               disabled={isPostDisabled}
               onClick={publish}
@@ -590,7 +560,6 @@ export function FeedView(_: FeedViewProps) {
 
             <div className="border-b border-[rgba(255,255,255,0.06)] my-4" />
 
-            {/* Header */}
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-lg font-bold text-[#FFF5E6]">Create Post</h3>
               <button 
@@ -601,7 +570,6 @@ export function FeedView(_: FeedViewProps) {
               </button>
             </div>
 
-            {/* Profile Row */}
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center font-bold text-white overflow-hidden flex-shrink-0">
                 {profile?.avatar_url ? (
@@ -616,7 +584,6 @@ export function FeedView(_: FeedViewProps) {
               </div>
             </div>
 
-            {/* Text Input */}
             <textarea
               value={newText}
               onChange={e => setNewText(e.target.value)}
@@ -624,7 +591,6 @@ export function FeedView(_: FeedViewProps) {
               className="w-full min-h-[80px] rounded-xl bg-transparent px-2 py-2 text-[#FFF5E6] text-base outline-none resize-none placeholder-[rgba(255,245,230,0.3)]"
             />
 
-            {/* Image Preview */}
             {newImgPrev && (
               <div className="relative mt-2">
                 <img 
@@ -641,7 +607,6 @@ export function FeedView(_: FeedViewProps) {
               </div>
             )}
 
-            {/* Action Buttons Row */}
             <div className="flex flex-wrap items-center gap-1 mt-3 pt-3 border-t border-[rgba(255,255,255,0.06)]">
               <button
                 onClick={() => fileInputRef.current?.click()}
