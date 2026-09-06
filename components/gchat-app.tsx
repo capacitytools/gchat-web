@@ -89,6 +89,12 @@ export function GChatApp() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
+  // ============================================================
+  // PINNED CHATS & CONTACTS — NEW STATE
+  // ============================================================
+  const [pinnedChats, setPinnedChats] = useState<string[]>([]);
+  const [pinnedContacts, setPinnedContacts] = useState<string[]>([]);
+
   // Auth Check
   useEffect(() => {
     const checkUser = async () => {
@@ -114,6 +120,15 @@ export function GChatApp() {
     if (view === "gchatone") fetchBusinessProfile();
     if (view === "profile" || view === "edit-profile" || view === "analytics") fetchProfile();
   }, [user, view]);
+
+  // Load pinned data from localStorage
+  useEffect(() => {
+    const savedPinnedChats = localStorage.getItem("gc_pinned_chats");
+    if (savedPinnedChats) setPinnedChats(JSON.parse(savedPinnedChats));
+    
+    const savedPinnedContacts = localStorage.getItem("gc_pinned_contacts");
+    if (savedPinnedContacts) setPinnedContacts(JSON.parse(savedPinnedContacts));
+  }, []);
 
   // Realtime messages
   useEffect(() => {
@@ -254,7 +269,8 @@ export function GChatApp() {
     const { data } = await supabase.from("messages").insert({ 
       chat_id: activeChatId, 
       user_id: user.id, 
-      text: draft 
+      text: draft,
+      status: "sent"
     }).select().single();
     
     if (data) {
@@ -298,6 +314,7 @@ export function GChatApp() {
     setSendAmount("");
     fetchWalletData();
   };
+
   const handleWithdraw = async () => {
     const amount = parseInt(withdrawAmount) * 100;
     if (!amount || amount <= 0 || amount > walletBalance) { 
@@ -586,6 +603,55 @@ export function GChatApp() {
     setAiSummary(null); 
   };
 
+  // ============================================================
+  // PIN FUNCTIONS — NEW
+  // ============================================================
+
+  // Pin Chat function
+  const handlePinChat = (chatId: string) => {
+    setPinnedChats((prev) => {
+      const newPinned = prev.includes(chatId)
+        ? prev.filter((id) => id !== chatId)
+        : [...prev, chatId];
+      localStorage.setItem("gc_pinned_chats", JSON.stringify(newPinned));
+      return newPinned;
+    });
+  };
+
+  // Pin Contact function
+  const handlePinContact = (contactId: string) => {
+    setPinnedContacts((prev) => {
+      const newPinned = prev.includes(contactId)
+        ? prev.filter((id) => id !== contactId)
+        : [...prev, contactId];
+      localStorage.setItem("gc_pinned_contacts", JSON.stringify(newPinned));
+      return newPinned;
+    });
+  };
+
+  // Delete Chat function
+  const handleDeleteChat = async (chatId: string) => {
+    try {
+      // Delete messages first
+      await supabase.from("messages").delete().eq("chat_id", chatId);
+      // Delete chat members
+      await supabase.from("chat_members").delete().eq("chat_id", chatId);
+      // Delete the chat
+      await supabase.from("chats").delete().eq("id", chatId);
+      
+      // Remove from pinned list if pinned
+      const updatedPinned = pinnedChats.filter((id) => id !== chatId);
+      setPinnedChats(updatedPinned);
+      localStorage.setItem("gc_pinned_chats", JSON.stringify(updatedPinned));
+      
+      // Refresh chat list
+      fetchChats();
+      setView("list");
+    } catch (err) {
+      console.error("Error deleting chat:", err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#020617]">
@@ -603,9 +669,11 @@ export function GChatApp() {
       {/* Render views based on state */}
       {view === "home" && <HomeView setView={setView} onLogout={() => supabase.auth.signOut()} />}
       {view === "list" && <ChatsListView setView={setView} chats={chats} onOpenChat={openChat} onNewChat={() => setShowNewChat(true)} />}
+      
       {view === "conversation" && activeChatId && (
         <ConversationView
           setView={setView}
+          activeChatId={activeChatId}
           activeChatName={activeChatName}
           messages={messages}
           userId={user.id}
@@ -615,8 +683,14 @@ export function GChatApp() {
           onSendMoney={() => setShowSendMoney(true)}
           onAISummary={generateAISummary}
           aiSummary={aiSummary}
+          onDeleteChat={handleDeleteChat}
+          onPinChat={handlePinChat}
+          onPinContact={handlePinContact}
+          isPinned={pinnedChats.includes(activeChatId)}
+          isContactPinned={pinnedContacts.includes(activeChatId)}
         />
       )}
+      
       {view === "feed" && <FeedView posts={posts} onLikePost={handleLikePost} onCreatePost={() => setShowCreatePost(true)} />}
       {view === "wallet" && <WalletView setView={setView} balance={walletBalance} ads={availableAds} transactions={transactions} userId={user.id} onWatchAd={startWatchingAd} onWithdraw={() => setShowWithdraw(true)} />}
       {view === "profile" && profile && <ProfileView profile={profile} setView={setView} onEdit={() => setView("edit-profile")} />}
