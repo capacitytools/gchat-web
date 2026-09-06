@@ -3,13 +3,6 @@
 import { useEffect, useRef } from "react";
 import "./nature.css";
 
-/*
-  NATURE SANCTUARY BACKGROUND
-  - Canvas: diagonal rain (15°), splash ripples, wandering fireflies
-  - CSS: god-rays, 3 parallax mist layers, flowing water + shimmer
-  - Performance: capped DPR, responsive particle counts, debounced resize,
-    respects prefers-reduced-motion.
-*/
 export function NatureBackground() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -82,7 +75,6 @@ export function NatureBackground() {
 
       const angle = 0.26;
 
-      // ---- RAIN ----
       ctx.lineWidth = 1;
       ctx.lineCap = "round";
       for (const d of drops) {
@@ -108,7 +100,6 @@ export function NatureBackground() {
         }
       }
 
-      // ---- RIPPLES ----
       for (let i = ripples.length - 1; i >= 0; i--) {
         const r = ripples[i];
         r.r += dt * 0.02;
@@ -124,7 +115,6 @@ export function NatureBackground() {
         ctx.stroke();
       }
 
-      // ---- FIREFLIES ----
       for (const f of flies) {
         f.t += dt * 0.001;
         f.x += Math.sin(f.t * 1.7) * f.sx;
@@ -172,18 +162,13 @@ export function NatureBackground() {
   }, []);
 
   return (
-    <div className="nature-bg" aria-hidden="true">
-      {/* Deep forest gradient base */}
+    <div className="nature-bg" style={{ zIndex: 0 }} aria-hidden="true">
       <div className="nature-base" />
-      {/* Golden god-rays from upper-left */}
       <div className="nature-rays" />
-      {/* Parallax mist layers */}
       <div className="nature-mist mist-1" />
       <div className="nature-mist mist-2" />
       <div className="nature-mist mist-3" />
-      {/* Canvas: rain + ripples + fireflies */}
       <canvas ref={canvasRef} className="nature-canvas" />
-      {/* Flowing water at the bottom */}
       <div className="nature-water">
         <svg className="nature-wave wave-back" viewBox="0 0 1200 120" preserveAspectRatio="none">
           <path d="M0,60 C150,100 350,20 600,60 C850,100 1050,20 1200,60 L1200,120 L0,120 Z" fill="rgba(26, 90, 90, 0.5)">
