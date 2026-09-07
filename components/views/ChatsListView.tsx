@@ -21,7 +21,6 @@ interface Props {
   chats: Chat[];
   onOpenChat: (c: Chat) => void;
   onNewChat: () => void;
-  refreshChats?: () => void;
 }
 
 /* ---------- helpers ---------- */
@@ -57,7 +56,7 @@ const STARTERS: string[] = [
   "What's one win you had this week? 🎉",
 ];
 
-/* ---------- Living Orb ---------- */
+/* ---------- Living Orb (exported for bottom nav) ---------- */
 export function LivingOrb({ active, unread = 0 }: { active?: boolean; unread?: number }) {
   const p = Math.min(unread, 8) / 8;
   return (
@@ -70,7 +69,7 @@ export function LivingOrb({ active, unread = 0 }: { active?: boolean; unread?: n
   );
 }
 
-export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshChats }: Props) {
+export function ChatsListView({ setView, chats, onOpenChat }: Props) {
   const supabase = createClient();
   const [me, setMe] = useState<string>("");
   const [enriched, setEnriched] = useState<Enriched[]>([]);
@@ -82,7 +81,6 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
   const [summaryId, setSummaryId] = useState<string | null>(null);
   const [actionsId, setActionsId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [isCreatingChat, setIsCreatingChat] = useState<boolean>(false);
   const touch = useRef<{ x: number; id: string } | null>(null);
 
   const say = (m: string): void => { setToast(m); setTimeout(() => setToast(null), 2200); };
@@ -92,155 +90,125 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
     supabase.auth.getUser().then(({ data }) => data.user && setMe(data.user.id));
   }, [supabase]);
 
-  /* enrich chats */
+  /* enrich chats with real message data */
   useEffect(() => {
     if (!me) return;
-    if (!chats.length) { setEnriched([]); return; }
+    if (!chats || chats.length === 0) { 
+      setEnriched([]); 
+      return; 
+    }
     (async () => {
-      const ids = chats.map((c: Chat) => c.id);
-      const { data } = await supabase.from("messages")
-        .select("chat_id,user_id,text,created_at").in("chat_id", ids).order("created_at", { ascending: true });
-      const by: Record<string, any[]> = {};
-      (data || []).forEach((m: any) => { (by[m.chat_id] = by[m.chat_id] || []).push(m); });
-      const pinned: string[] = readLS("gc_pinned", []);
-      const muted: string[] = readLS("gc_muted", []);
-      const archived: string[] = readLS("gc_archived", []);
-      const now = Date.now();
-      const list: Enriched[] = chats.map((c: Chat) => {
-        const msgs = by[c.id] || [];
-        const last = msgs[msgs.length - 1];
-        const lastRead = Number(localStorage.getItem(`gc_lastread_${c.id}`) || 0);
-        const unread = msgs.filter((m: any) => m.user_id !== me && new Date(m.created_at).getTime() > lastRead).length;
-        const age = last ? now - new Date(last.created_at).getTime() : Infinity;
-        const score = msgs.length + (age < 864e5 ? 50 : age < 6048e5 ? 20 : 0) + (pinned.includes(c.id) ? 100 : 0);
-        return {
-          ...c, lastText: last?.text, lastAt: last?.created_at, lastMine: last?.user_id === me,
-          count: msgs.length, unread, pinned: pinned.includes(c.id), muted: muted.includes(c.id),
-          archived: archived.includes(c.id), score, mood: moodOf(last?.text), streak: streakOf(msgs),
-          online: age < 300000, lastFew: msgs.slice(-5).map((m: any) => m.text).filter(Boolean),
-        };
-      }).sort((a: Enriched, b: Enriched) => {
-        // Pinned first, then by score
-        if (a.pinned && !b.pinned) return -1;
-        if (!a.pinned && b.pinned) return 1;
-        return b.score - a.score;
-      });
-      setEnriched(list);
+      try {
+        const ids = chats.map((c: Chat) => c.id);
+        const { data } = await supabase.from("messages")
+          .select("chat_id,user_id,text,created_at")
+          .in("chat_id", ids)
+          .order("created_at", { ascending: true });
+        
+        const by: Record<string, any[]> = {};
+        (data || []).forEach((m: any) => { 
+          if (!by[m.chat_id]) by[m.chat_id] = [];
+          by[m.chat_id].push(m); 
+        });
+        
+        const pinned: string[] = readLS("gc_pinned", []);
+        const muted: string[] = readLS("gc_muted", []);
+        const archived: string[] = readLS("gc_archived", []);
+        const now = Date.now();
+        
+        const list: Enriched[] = chats.map((c: Chat) => {
+          const msgs = by[c.id] || [];
+          const last = msgs[msgs.length - 1];
+          const lastRead = Number(localStorage.getItem(`gc_lastread_${c.id}`) || 0);
+          const unread = msgs.filter((m: any) => m.user_id !== me && new Date(m.created_at).getTime() > lastRead).length;
+          const age = last ? now - new Date(last.created_at).getTime() : Infinity;
+          const score = msgs.length + (age < 864e5 ? 50 : age < 6048e5 ? 20 : 0) + (pinned.includes(c.id) ? 100 : 0);
+          
+          return {
+            ...c, 
+            lastText: last?.text, 
+            lastAt: last?.created_at, 
+            lastMine: last?.user_id === me,
+            count: msgs.length, 
+            unread, 
+            pinned: pinned.includes(c.id), 
+            muted: muted.includes(c.id),
+            archived: archived.includes(c.id), 
+            score, 
+            mood: moodOf(last?.text), 
+            streak: streakOf(msgs),
+            online: age < 300000, 
+            lastFew: msgs.slice(-5).map((m: any) => m.text).filter(Boolean),
+          };
+        }).sort((a: Enriched, b: Enriched) => b.score - a.score);
+        
+        setEnriched(list);
+      } catch (err) {
+        console.error("Error enriching chats:", err);
+      }
     })();
   }, [chats, me, supabase]);
 
-  /* suggestions + radar */
+  /* suggestions + radar (real profiles) */
   useEffect(() => {
     if (!me) return;
     (async () => {
-      const { data } = await supabase.from("profiles").select("id, username, display_name, avatar_url").neq("id", me).limit(12);
-      const all = data || [];
-      setSuggestions(all.slice(0, 8).map((p: any) => ({ ...p, compat: 70 + (hash(p.id) % 30) })));
-      setRadar(all.slice(0, 9));
+      try {
+        const { data } = await supabase.from("profiles")
+          .select("id, username, display_name, avatar_url")
+          .neq("id", me)
+          .limit(12);
+        const all = data || [];
+        setSuggestions(all.slice(0, 8).map((p: any) => ({ ...p, compat: 70 + (hash(p.id) % 30) })));
+        setRadar(all.slice(0, 9));
+      } catch (err) {
+        console.error("Error fetching suggestions:", err);
+      }
     })();
   }, [me, supabase]);
 
-  /* smart search */
+  /* smart search (name / username / email) */
   useEffect(() => {
     const t = setTimeout(async () => {
       const q = term.trim();
       if (q.length < 2) { setResults([]); return; }
-      const { data } = await supabase.from("profiles")
-        .select("id, username, display_name, email, avatar_url")
-        .or(`username.ilike.%${q}%,display_name.ilike.%${q}%,email.ilike.%${q}%`)
-        .neq("id", me).limit(8);
-      setResults(data || []);
+      try {
+        const { data } = await supabase.from("profiles")
+          .select("id, username, display_name, email, avatar_url")
+          .or(`username.ilike.%${q}%,display_name.ilike.%${q}%,email.ilike.%${q}%`)
+          .neq("id", me)
+          .limit(8);
+        setResults(data || []);
+      } catch (err) {
+        console.error("Search error:", err);
+        setResults([]);
+      }
     }, 400);
     return () => clearTimeout(t);
   }, [term, me, supabase]);
 
-  // ============================================================
-  // FIXED: startChatWith — Creates chat and navigates
-  // ============================================================
   const startChatWith = async (person: any): Promise<void> => {
-    if (isCreatingChat) return;
-    setIsCreatingChat(true);
-    
     try {
-      // Check if chat already exists with this person
-      const { data: existingMembers, error: memberError } = await supabase
-        .from("chat_members")
-        .select("chat_id")
-        .eq("user_id", me);
-
-      if (memberError) throw memberError;
-
-      let existingChatId: string | null = null;
-
-      // Check if any chat has both users
-      if (existingMembers && existingMembers.length > 0) {
-        const chatIds = existingMembers.map((m: any) => m.chat_id);
-        const { data: otherMembers } = await supabase
-          .from("chat_members")
-          .select("chat_id")
-          .in("chat_id", chatIds)
-          .eq("user_id", person.id);
-
-        if (otherMembers && otherMembers.length > 0) {
-          existingChatId = otherMembers[0].chat_id;
-        }
+      const { data: chat, error } = await supabase.from("chats")
+        .insert({ name: `Chat with ${person.display_name || person.username}`, created_by: me })
+        .select()
+        .single();
+        
+      if (error || !chat) { 
+        say("Could not create chat"); 
+        return; 
       }
-
-      let chatId: string;
-      let chatName: string;
-
-      if (existingChatId) {
-        // Use existing chat
-        chatId = existingChatId;
-        chatName = `Chat with ${person.display_name || person.username}`;
-        say("Chat already exists! Opening...");
-      } else {
-        // Create new chat
-        const { data: newChat, error: chatError } = await supabase
-          .from("chats")
-          .insert({
-            name: `Chat with ${person.display_name || person.username}`,
-            created_by: me
-          })
-          .select()
-          .single();
-
-        if (chatError || !newChat) {
-          throw new Error(chatError?.message || "Failed to create chat");
-        }
-
-        // Add both members
-        const { error: insertError } = await supabase
-          .from("chat_members")
-          .insert([
-            { chat_id: newChat.id, user_id: me, role: "owner" },
-            { chat_id: newChat.id, user_id: person.id, role: "member" }
-          ]);
-
-        if (insertError) {
-          // Rollback: delete the chat if member insertion fails
-          await supabase.from("chats").delete().eq("id", newChat.id);
-          throw new Error(insertError.message);
-        }
-
-        chatId = newChat.id;
-        chatName = newChat.name;
-
-        // Refresh chat list
-        if (refreshChats) {
-          await refreshChats();
-        }
-      }
-
-      // Close hub and open conversation
-      setHubOpen(false);
-      onOpenChat({ id: chatId, name: chatName, updated_at: new Date().toISOString() });
       
-    } catch (error: any) {
-      console.error("Error starting chat:", error);
-      say("Failed to start chat: " + (error.message || "Unknown error"));
-    } finally {
-      setIsCreatingChat(false);
+      await supabase.from("chat_members").insert([
+        { chat_id: chat.id, user_id: me, role: "owner" },
+        { chat_id: chat.id, user_id: person.id, role: "member" },
+      ]);
+      
+      setHubOpen(false);
+      onOpenChat({ id: chat.id, name: chat.name, updated_at: chat.created_at });
+    } catch (err) {
+      console.error("Error starting chat:", err);
+      say("Failed to start chat");
     }
   };
 
@@ -263,7 +231,7 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
 
   return (
     <div className="relative z-10 flex flex-col min-h-screen">
-      {/* Header */}
+      {/* Header with Spark button */}
       <header className="sticky top-0 z-20 bg-[#0A1A0A]/85 backdrop-blur-xl border-b border-[rgba(255,215,0,0.15)] px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button onClick={() => setView("home")} className="p-2 rounded-full hover:bg-white/5">
@@ -273,11 +241,13 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
         </div>
         <button className="spark-btn" aria-label="Open Connection Hub" onClick={() => setHubOpen(true)}>
           <span className="spark-diamond" />
-          <span className="spark-orbit o1" /><span className="spark-orbit o2" /><span className="spark-orbit o3" />
+          <span className="spark-orbit o1" />
+          <span className="spark-orbit o2" />
+          <span className="spark-orbit o3" />
         </button>
       </header>
 
-      {/* Chat list */}
+      {/* Living conversation list */}
       <div className="hub-list">
         {visible.length === 0 && (
           <div className="text-center py-20 text-[rgba(255,245,230,0.5)]">
@@ -289,14 +259,23 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
           <div key={c.id} style={{ animationDelay: `${i * 0.06}s` }}>
             <div
               className={`liv-row ${c.pinned ? "pinned" : ""}`}
-              onClick={() => { localStorage.setItem(`gc_lastread_${c.id}`, String(Date.now())); onOpenChat(c); }}
+              onClick={() => {
+                localStorage.setItem(`gc_lastread_${c.id}`, String(Date.now()));
+                onOpenChat(c);
+              }}
               onDoubleClick={() => markRead(c.id)}
               onTouchStart={(e: React.TouchEvent) => (touch.current = { x: e.touches[0].clientX, id: c.id })}
               onTouchEnd={(e: React.TouchEvent) => {
-                const t = touch.current; if (!t || t.id !== c.id) return;
+                const t = touch.current; 
+                if (!t || t.id !== c.id) return;
                 const dx = e.changedTouches[0].clientX - t.x;
-                if (dx > 70) { setSummaryId(summaryId === c.id ? null : c.id); setActionsId(null); }
-                else if (dx < -70) { setActionsId(actionsId === c.id ? null : c.id); setSummaryId(null); }
+                if (dx > 70) { 
+                  setSummaryId(summaryId === c.id ? null : c.id); 
+                  setActionsId(null); 
+                } else if (dx < -70) { 
+                  setActionsId(actionsId === c.id ? null : c.id); 
+                  setSummaryId(null); 
+                }
                 touch.current = null;
               }}
             >
@@ -318,12 +297,20 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
                 <p className="liv-prev truncate">{c.lastMine ? "You: " : ""}{c.lastText || "Say hello 👋"}</p>
               </div>
               <div className="text-right">
-                {c.lastAt && <p className="text-[10px] text-[rgba(255,245,230,0.4)]">{new Date(c.lastAt).getHours()}:{String(new Date(c.lastAt).getMinutes()).padStart(2, "0")}</p>}
-                {c.unread > 0 && <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFD700] text-black">{c.unread}</span>}
+                {c.lastAt && (
+                  <p className="text-[10px] text-[rgba(255,245,230,0.4)]">
+                    {new Date(c.lastAt).getHours()}:{String(new Date(c.lastAt).getMinutes()).padStart(2, "0")}
+                  </p>
+                )}
+                {c.unread > 0 && (
+                  <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFD700] text-black">
+                    {c.unread}
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* Summary panel */}
+            {/* Swipe right → AI summary */}
             {summaryId === c.id && (
               <div className="liv-panel">
                 <Sparkles className="inline h-3.5 w-3.5 text-[#00F0FF] mr-1" />
@@ -331,20 +318,24 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
               </div>
             )}
 
-            {/* Actions panel */}
+            {/* Swipe left → actions */}
             {actionsId === c.id && (
               <div className="liv-actions">
                 <button onClick={() => toggleLS("gc_pinned", c.id, "pinned")}>
-                  <Pin className="h-4 w-4 text-[#FFD700]" />{c.pinned ? "Unpin" : "Pin"}
+                  <Pin className="h-4 w-4 text-[#FFD700]" />
+                  {c.pinned ? "Unpin" : "Pin"}
                 </button>
                 <button onClick={() => toggleLS("gc_muted", c.id, "muted")}>
-                  <BellOff className="h-4 w-4" />{c.muted ? "Unmute" : "Mute"}
+                  <BellOff className="h-4 w-4" />
+                  {c.muted ? "Unmute" : "Mute"}
                 </button>
                 <button onClick={() => { toggleLS("gc_archived", c.id, "archived"); say("Archived"); }}>
-                  <Archive className="h-4 w-4" />Archive
+                  <Archive className="h-4 w-4" />
+                  Archive
                 </button>
                 <button onClick={() => markRead(c.id)}>
-                  <Zap className="h-4 w-4 text-[#00F0FF]" />Read
+                  <Zap className="h-4 w-4 text-[#00F0FF]" />
+                  Read
                 </button>
               </div>
             )}
@@ -352,9 +343,7 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
         ))}
       </div>
 
-      {/* ============================================================
-         CONNECTION HUB — FIXED
-         ============================================================ */}
+      {/* ============ CONNECTION HUB ============ */}
       {hubOpen && (
         <div className="hub-overlay">
           <header className="sticky top-0 z-10 bg-[#0A1A0A]/90 backdrop-blur-xl px-4 py-3 flex items-center justify-between border-b border-[rgba(255,215,0,0.15)]">
@@ -373,7 +362,11 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
                 {radar.map((p: any) => {
                   const h = hash(p.id);
                   return (
-                    <button key={p.id} className="radar-dot" style={{ left: `${15 + (h % 70)}%`, top: `${12 + ((h >> 2) % 68)}%`, animationDelay: `${(h % 10) / 5}s` }} onClick={() => startChatWith(p)}>
+                    <button key={p.id} className="radar-dot" style={{ 
+                      left: `${15 + (h % 70)}%`, 
+                      top: `${12 + ((h >> 2) % 68)}%`, 
+                      animationDelay: `${(h % 10) / 5}s` 
+                    }} onClick={() => startChatWith(p)}>
                       <small>{(p.display_name || p.username || "?").slice(0, 8)}</small>
                     </button>
                   );
@@ -385,13 +378,21 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
             <section className="hub-zone">
               <h3 className="hub-title text-sm mb-2">Smart Search</h3>
               <div className="flex gap-2">
-                <input value={term} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTerm(e.target.value)} placeholder="Name, @username, or email..."
-                  className="flex-1 rounded-xl bg-white/5 border border-[rgba(255,215,0,0.2)] px-4 py-3 text-[#FFF5E6] outline-none" />
-                <button className="p-3 rounded-xl bg-[rgba(255,215,0,0.15)] text-[#FFD700]"><Search className="h-5 w-5" /></button>
+                <input 
+                  value={term} 
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTerm(e.target.value)} 
+                  placeholder="Name, @username, or email..."
+                  className="flex-1 rounded-xl bg-white/5 border border-[rgba(255,215,0,0.2)] px-4 py-3 text-[#FFF5E6] outline-none" 
+                />
+                <button className="p-3 rounded-xl bg-[rgba(255,215,0,0.15)] text-[#FFD700]">
+                  <Search className="h-5 w-5" />
+                </button>
               </div>
               <div className="flex gap-2 mt-2">
                 {[Mic, ImageIcon, QrCode, Link2].map((Ic: any, i: number) => (
-                  <button key={i} onClick={() => say("Coming soon ✨")} className="p-2.5 rounded-lg bg-white/5 text-[rgba(255,245,230,0.6)]"><Ic className="h-4 w-4" /></button>
+                  <button key={i} onClick={() => say("Coming soon ✨")} className="p-2.5 rounded-lg bg-white/5 text-[rgba(255,245,230,0.6)]">
+                    <Ic className="h-4 w-4" />
+                  </button>
                 ))}
               </div>
               {results.map((p: any) => (
@@ -403,12 +404,8 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
                     <p className="text-sm text-[#FFF5E6] truncate">{p.display_name}</p>
                     <p className="text-[10px] text-[rgba(255,245,230,0.5)] truncate">@{p.username} · {p.email}</p>
                   </div>
-                  <button 
-                    onClick={() => startChatWith(p)} 
-                    disabled={isCreatingChat}
-                    className="px-3 py-1.5 rounded-lg bg-[#FFD700] text-black text-xs font-bold disabled:opacity-50"
-                  >
-                    {isCreatingChat ? "..." : "Chat"}
+                  <button onClick={() => startChatWith(p)} className="px-3 py-1.5 rounded-lg bg-[#FFD700] text-black text-xs font-bold">
+                    Chat
                   </button>
                 </div>
               ))}
@@ -425,12 +422,8 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
                     </div>
                     <p className="text-xs text-[#FFF5E6] mt-2 truncate">{p.display_name || p.username}</p>
                     <p className="compat">⚡ {p.compat}% compatible</p>
-                    <button 
-                      onClick={() => startChatWith(p)}
-                      disabled={isCreatingChat}
-                      className="mt-2 px-3 py-1 rounded-lg bg-white/10 text-[10px] text-[#FFF5E6] disabled:opacity-50"
-                    >
-                      {isCreatingChat ? "..." : "Connect"}
+                    <button onClick={() => startChatWith(p)} className="mt-2 px-3 py-1 rounded-lg bg-white/10 text-[10px] text-[#FFF5E6]">
+                      Connect
                     </button>
                   </div>
                 ))}
@@ -441,11 +434,26 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
             <section className="hub-zone">
               <h3 className="hub-title text-sm mb-2">Quick Actions</h3>
               <div className="qa-grid">
-                <button className="qa-btn" onClick={() => { setHubOpen(false); setView("gtribe"); }}><Users2 className="h-5 w-5 text-[#00F0FF]" />New Group</button>
-                <button className="qa-btn" onClick={() => say("Broadcast coming soon 📡")}><Megaphone className="h-5 w-5 text-[#FFD700]" />Broadcast</button>
-                <button className="qa-btn" onClick={() => say("Anonymous Chat coming soon 🎭")}><Ghost className="h-5 w-5 text-[#B026FF]" />Anonymous</button>
-                <button className="qa-btn" onClick={() => { setHubOpen(false); setView("gchatone"); }}><Building2 className="h-5 w-5 text-[#22c55e]" />Business</button>
-                <button className="qa-btn" onClick={() => say("Support is on its way 🤍")}><LifeBuoy className="h-5 w-5 text-[#FF2D95]" />Support</button>
+                <button className="qa-btn" onClick={() => { setHubOpen(false); setView("gtribe"); }}>
+                  <Users2 className="h-5 w-5 text-[#00F0FF]" />
+                  New Group
+                </button>
+                <button className="qa-btn" onClick={() => say("Broadcast coming soon 📡")}>
+                  <Megaphone className="h-5 w-5 text-[#FFD700]" />
+                  Broadcast
+                </button>
+                <button className="qa-btn" onClick={() => say("Anonymous Chat coming soon 🎭")}>
+                  <Ghost className="h-5 w-5 text-[#B026FF]" />
+                  Anonymous
+                </button>
+                <button className="qa-btn" onClick={() => { setHubOpen(false); setView("gchatone"); }}>
+                  <Building2 className="h-5 w-5 text-[#22c55e]" />
+                  Business
+                </button>
+                <button className="qa-btn" onClick={() => say("Support is on its way 🤍")}>
+                  <LifeBuoy className="h-5 w-5 text-[#FF2D95]" />
+                  Support
+                </button>
               </div>
             </section>
 
@@ -454,8 +462,12 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat, refreshCh
               <h3 className="hub-title text-sm mb-2">Conversation Starters <span className="hub-gold">· AI icebreakers</span></h3>
               {STARTERS.map((s: string) => (
                 <button key={s} className="starter-chip" onClick={async () => {
-                  try { await navigator.clipboard.writeText(s); say("Starter copied — paste it in any chat ✨"); }
-                  catch { say(s); }
+                  try { 
+                    await navigator.clipboard.writeText(s); 
+                    say("Starter copied — paste it in any chat ✨"); 
+                  } catch { 
+                    say(s); 
+                  }
                 }}>{s}</button>
               ))}
             </section>
