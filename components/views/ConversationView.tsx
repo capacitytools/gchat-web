@@ -1,114 +1,146 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Send } from "lucide-react";
+import {
+  ArrowLeft, Send, Smile, MoreVertical,
+  Paperclip, DollarSign, Sparkles, Loader2,
+  Pin, Trash2, UserPlus
+} from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import { NatureBackground } from "../NatureBackground";
+import "./conversation.css";
 
 type Message = {
   id: string;
   chat_id: string;
   user_id: string;
   text: string;
+  media_url: string | null;
   created_at: string;
+  status: string;
 };
 
-type Chat = { id: string; name: string };
+type Profile = {
+  id: string;
+  display_name: string;
+  username: string;
+  avatar_url: string | null;
+};
 
-interface Props {
+interface ConversationViewProps {
   setView: (view: any) => void;
-  chat: Chat;
+  activeChatId: string;
+  activeChatName: string;
+  messages: Message[];
   userId: string;
+  draft: string;
+  setDraft: (draft: string) => void;
+  onSendMessage: () => void;
+  onSendMoney: () => void;
+  onAISummary: () => void;
+  aiSummary: string | null;
+  onDeleteChat?: (chatId: string) => void;
+  onPinChat?: (chatId: string) => void;
+  onPinContact?: (contactId: string) => void;
+  isPinned?: boolean;
+  isContactPinned?: boolean;
 }
 
-export function ConversationView({ setView, chat, userId }: Props) {
+export function ConversationView({
+  setView,
+  activeChatId,
+  activeChatName,
+  messages,
+  userId,
+  draft,
+  setDraft,
+  onSendMessage,
+  onSendMoney,
+  onAISummary,
+  aiSummary,
+  onDeleteChat,
+  onPinChat,
+  onPinContact,
+  isPinned = false,
+  isContactPinned = false,
+}: ConversationViewProps) {
   const supabase = createClient();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [draft, setDraft] = useState("");
-  const [otherUser, setOtherUser] = useState<any>(null);
+  const [otherUser, setOtherUser] = useState<Profile | null>(null);
+  const [isOnline, setIsOnline] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const [localMessages, setLocalMessages] = useState<Message[]>(messages);
+  const [showOptions, setShowOptions] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const optionsRef = useRef<HTMLDivElement>(null);
 
-  // Load messages
   useEffect(() => {
-    if (!chat.id) return;
+    const getOtherUser = async () => {
+      try {
+        if (!activeChatId) return;
+        
+        const { data: members } = await supabase
+          .from("chat_members")
+          .select("user_id")
+          .eq("chat_id", activeChatId);
 
-    const loadMessages = async () => {
-      setLoading(true);
-      // Get other user
-      const { data: members } = await supabase
-        .from("chat_members")
-        .select("user_id")
-        .eq("chat_id", chat.id);
-
-      if (members) {
-        const otherId = members.find((m: any) => m.user_id !== userId)?.user_id;
-        if (otherId) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("display_name, username, avatar_url")
-            .eq("id", otherId)
-            .single();
-          setOtherUser(profile);
+        if (members) {
+          const otherUserId = members.find((m: any) => m.user_id !== userId)?.user_id;
+          if (otherUserId) {
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("id, display_name, username, avatar_url")
+              .eq("id", otherUserId)
+              .single();
+            setOtherUser(profile);
+          }
         }
+      } catch (err) {
+        console.error("Error fetching other user:", err);
+      } finally {
+        setIsLoading(false);
       }
-
-      // Get messages
-      const { data } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("chat_id", chat.id)
-        .order("created_at", { ascending: true });
-
-      setMessages(data || []);
-      setLoading(false);
     };
 
-    loadMessages();
+    if (activeChatId) {
+      getOtherUser();
+    }
+  }, [activeChatId, userId]);
 
-    // Subscribe to new messages
-    const channel = supabase
-      .channel(`chat:${chat.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `chat_id=eq.${chat.id}`,
-        },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [chat.id, userId]);
-
-  // Scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    setLocalMessages(messages);
   }, [messages]);
 
-  // Send message
-  const sendMessage = async () => {
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [localMessages]);
+
+  useEffect(() => {
+    setIsOnline(Math.random() > 0.3);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (optionsRef.current && !optionsRef.current.contains(event.target as Node)) {
+        setShowOptions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSend = () => {
     if (!draft.trim()) return;
+    onSendMessage();
+    setTyping(true);
+    setTimeout(() => setTyping(false), 2000);
+  };
 
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({
-        chat_id: chat.id,
-        user_id: userId,
-        text: draft.trim(),
-      })
-      .select()
-      .single();
-
-    if (!error && data) {
-      setMessages((prev) => [...prev, data]);
-      setDraft("");
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
   };
 
@@ -117,95 +149,307 @@ export function ConversationView({ setView, chat, userId }: Props) {
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
-  const formatDate = (iso: string) => {
+  const isToday = (iso: string) => {
     const d = new Date(iso);
     const today = new Date();
-    if (d.toDateString() === today.toDateString()) return "Today";
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-    return d.toLocaleDateString([], { month: "short", day: "numeric" });
+    return d.toDateString() === today.toDateString();
+  };
+
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+  };
+
+  const groupedMessages: { date: string; messages: Message[] }[] = [];
+  let currentDate = "";
+
+  localMessages.forEach((msg) => {
+    const dateKey = new Date(msg.created_at).toDateString();
+    if (dateKey !== currentDate) {
+      currentDate = dateKey;
+      groupedMessages.push({
+        date: dateKey,
+        messages: [],
+      });
+    }
+    groupedMessages[groupedMessages.length - 1].messages.push(msg);
+  });
+
+  const handleDeleteChat = () => {
+    if (onDeleteChat) {
+      onDeleteChat(activeChatId);
+    }
+    setShowDeleteConfirm(false);
+    setView("list");
+  };
+
+  const handlePinChat = () => {
+    if (onPinChat) {
+      onPinChat(activeChatId);
+    }
+    setShowOptions(false);
+  };
+
+  const handlePinContact = () => {
+    if (onPinContact && otherUser) {
+      onPinContact(otherUser.id);
+    }
+    setShowOptions(false);
+  };
+
+  const handleImageClick = (url: string | null) => {
+    if (url) {
+      window.open(url, "_blank");
+    }
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#0A1A0A]">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-[#0A1A0A]/90 backdrop-blur-xl border-b border-[rgba(255,215,0,0.1)] px-4 py-3 flex items-center gap-3">
-        <button onClick={() => setView("list")} className="p-2">
-          <ArrowLeft className="h-5 w-5 text-white" />
-        </button>
-        <div className="flex-1">
-          <p className="text-white font-bold">{chat.name}</p>
-          <p className="text-xs text-gray-400">
-            {otherUser?.display_name || otherUser?.username || "User"}
-          </p>
+    <div className="conversation-wrap">
+      <NatureBackground />
+
+      <div className="conv-header">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setView("list")}
+            className="p-2 rounded-full hover:bg-white/10 transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5 text-[#FFF5E6]" />
+          </button>
+
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center font-bold text-white overflow-hidden">
+                {otherUser?.avatar_url ? (
+                  <img src={otherUser.avatar_url} className="w-full h-full object-cover" alt="" />
+                ) : (
+                  (otherUser?.display_name || activeChatName || "U").charAt(0).toUpperCase()
+                )}
+              </div>
+              {isOnline && (
+                <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#0A1A0A]" />
+              )}
+              {isContactPinned && (
+                <span className="absolute -top-1 -right-1 text-[10px]">📌</span>
+              )}
+            </div>
+            <div>
+              <p className="text-sm font-bold text-[#FFF5E6] flex items-center gap-1">
+                {otherUser?.display_name || activeChatName || "User"}
+                {isContactPinned && <Pin className="h-3 w-3 text-[#FFD700]" />}
+              </p>
+              <p className="text-[10px] text-[rgba(255,245,230,0.4)]">
+                {isOnline ? "Online" : "Offline"}
+                {isPinned && " · 📌 Pinned"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onSendMoney}
+            className="p-2 rounded-full hover:bg-white/10 transition-colors"
+          >
+            <DollarSign className="h-5 w-5 text-emerald-400" />
+          </button>
+          <button
+            onClick={onAISummary}
+            className="p-2 rounded-full hover:bg-white/10 transition-colors"
+          >
+            <Sparkles className="h-5 w-5 text-[#FFD700]" />
+          </button>
+
+          <div className="relative" ref={optionsRef}>
+            <button
+              onClick={() => setShowOptions(!showOptions)}
+              className="p-2 rounded-full hover:bg-white/10 transition-colors"
+            >
+              <MoreVertical className="h-5 w-5 text-[#FFF5E6]" />
+            </button>
+
+            {showOptions && (
+              <div className="absolute right-0 top-full mt-1 w-48 bg-[#0c140c] border border-[rgba(255,215,0,0.15)] rounded-xl shadow-lg overflow-hidden z-50">
+                <button
+                  onClick={handlePinChat}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-sm text-[#FFF5E6] hover:bg-white/5 transition-colors"
+                >
+                  <Pin className="h-4 w-4 text-[#FFD700]" />
+                  {isPinned ? "Unpin Chat" : "Pin Chat"}
+                </button>
+
+                <button
+                  onClick={handlePinContact}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-sm text-[#FFF5E6] hover:bg-white/5 transition-colors"
+                >
+                  <UserPlus className="h-4 w-4 text-[#00F0FF]" />
+                  {isContactPinned ? "Unpin Contact" : "Pin Contact"}
+                </button>
+
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-sm text-[#FF2D95] hover:bg-white/5 transition-colors border-t border-[rgba(255,255,255,0.05)]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Conversation
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {loading ? (
-          <div className="text-center text-gray-400 py-20">Loading...</div>
-        ) : messages.length === 0 ? (
-          <div className="text-center text-gray-400 py-20">
-            <p>No messages yet</p>
-            <p className="text-sm">Say hello!</p>
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-[#0c140c] border border-[rgba(255,215,0,0.2)] p-6">
+            <h3 className="text-lg font-bold text-[#FFF5E6] mb-2">Delete Conversation?</h3>
+            <p className="text-sm text-[rgba(255,245,230,0.6)] mb-6">
+              This will delete the entire conversation for you. This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-3 rounded-xl bg-white/5 text-[#FFF5E6] font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteChat}
+                className="flex-1 py-3 rounded-xl bg-[#FF2D95] text-white font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aiSummary && (
+        <div className="mx-4 mt-2 p-3 rounded-xl bg-[rgba(255,215,0,0.08)] border border-[rgba(255,215,0,0.2)]">
+          <p className="text-sm text-[#FFF5E6]">{aiSummary}</p>
+        </div>
+      )}
+
+      <div className="conv-messages">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="h-6 w-6 animate-spin text-[#FFD700]" />
+          </div>
+        ) : localMessages.length === 0 ? (
+          <div className="text-center py-20 text-[rgba(255,245,230,0.5)]">
+            <p className="text-lg mb-2">💬 No messages yet</p>
+            <p className="text-sm">Say hello to start the conversation!</p>
           </div>
         ) : (
-          messages.map((msg, i) => {
-            const isMine = msg.user_id === userId;
-            const showDate = i === 0 || new Date(msg.created_at).toDateString() !== new Date(messages[i - 1].created_at).toDateString();
+          groupedMessages.map((group, groupIndex) => (
+            <div key={groupIndex}>
+              <div className="flex justify-center my-4">
+                <span className="text-[10px] px-3 py-1 rounded-full bg-[rgba(255,255,255,0.05)] text-[rgba(255,245,230,0.4)] border border-[rgba(255,255,255,0.06)]">
+                  {isToday(group.date) ? "Today" : formatDate(group.date)}
+                </span>
+              </div>
 
-            return (
-              <div key={msg.id}>
-                {showDate && (
-                  <div className="text-center my-4">
-                    <span className="text-xs px-3 py-1 rounded-full bg-white/5 text-gray-400 border border-white/5">
-                      {formatDate(msg.created_at)}
-                    </span>
-                  </div>
-                )}
-                <div className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+              {group.messages.map((msg, index) => {
+                const isMine = msg.user_id === userId;
+                const showAvatar = !isMine && (index === 0 || group.messages[index - 1]?.user_id !== msg.user_id);
+
+                return (
                   <div
-                    className={`max-w-[75%] px-4 py-2.5 rounded-2xl ${
-                      isMine
-                        ? "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black rounded-br-sm"
-                        : "bg-white/10 text-white rounded-bl-sm"
+                    key={msg.id}
+                    className={`flex items-end gap-2 mb-1 animate-messageIn ${
+                      isMine ? "justify-end" : "justify-start"
                     }`}
                   >
-                    <p className="text-sm break-words">{msg.text}</p>
-                    <p className={`text-[9px] mt-1 ${isMine ? "text-black/60" : "text-gray-400"}`}>
-                      {formatTime(msg.created_at)}
-                    </p>
+                    {!isMine && showAvatar && (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center font-bold text-white text-xs overflow-hidden flex-shrink-0">
+                        {otherUser?.avatar_url ? (
+                          <img src={otherUser.avatar_url} className="w-full h-full object-cover" alt="" />
+                        ) : (
+                          (otherUser?.display_name || "U").charAt(0).toUpperCase()
+                        )}
+                      </div>
+                    )}
+                    {!isMine && !showAvatar && <div className="w-8 flex-shrink-0" />}
+
+                    <div
+                      className={`max-w-[75%] px-4 py-2.5 rounded-2xl ${
+                        isMine
+                          ? "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black rounded-br-sm shadow-lg shadow-[rgba(255,215,0,0.15)]"
+                          : "bg-emerald-500/20 text-[#FFF5E6] rounded-bl-sm border border-emerald-500/20 shadow-lg shadow-emerald-500/10"
+                      }`}
+                    >
+                      {msg.media_url && (
+                        <img
+                          src={msg.media_url}
+                          className="max-w-full max-h-60 rounded-lg mb-1 cursor-pointer"
+                          alt="Message attachment"
+                          onClick={() => handleImageClick(msg.media_url)}
+                        />
+                      )}
+                      {msg.text && <p className="text-sm break-words">{msg.text}</p>}
+                      <p className={`text-[9px] mt-1 ${isMine ? "text-black/60" : "text-[rgba(255,245,230,0.4)]"}`}>
+                        {formatTime(msg.created_at)}
+                        {isMine && (
+                          <span className="ml-2">
+                            {msg.status === "sent" ? "✓" : "✓✓"}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+
+                    {isMine && <div className="w-8 flex-shrink-0" />}
                   </div>
-                </div>
-              </div>
-            );
-          })
+                );
+              })}
+            </div>
+          ))
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="sticky bottom-0 bg-[#0A1A0A]/90 backdrop-blur-xl border-t border-[rgba(255,215,0,0.1)] p-4">
-        <div className="flex gap-2">
+      {typing && (
+        <div className="px-4 py-1">
+          <div className="flex items-center gap-2 text-[rgba(255,245,230,0.4)] text-xs">
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-500 flex items-center justify-center text-white text-[8px] font-bold">
+              {otherUser?.display_name?.charAt(0) || "U"}
+            </div>
+            <span>typing</span>
+            <span className="flex gap-0.5">
+              <span className="w-1 h-1 bg-[rgba(255,245,230,0.4)] rounded-full animate-bounce" style={{ animationDelay: "0s" }} />
+              <span className="w-1 h-1 bg-[rgba(255,245,230,0.4)] rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
+              <span className="w-1 h-1 bg-[rgba(255,245,230,0.4)] rounded-full animate-bounce" style={{ animationDelay: "0.4s" }} />
+            </span>
+          </div>
+        </div>
+      )}
+
+      <div className="conv-input">
+        <div className="flex items-center gap-2 bg-[rgba(255,255,255,0.05)] rounded-full px-4 py-1.5 border border-[rgba(255,255,255,0.06)] flex-1">
+          <button className="p-1.5 rounded-full hover:bg-white/10 transition-colors">
+            <Smile className="h-5 w-5 text-[rgba(255,245,230,0.4)]" />
+          </button>
+
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            onKeyDown={handleKeyDown}
             placeholder="Type a message..."
-            className="flex-1 rounded-full bg-white/5 border border-white/10 px-4 py-2 text-white outline-none placeholder-gray-500"
+            className="flex-1 bg-transparent outline-none text-[#FFF5E6] text-sm placeholder-[rgba(255,245,230,0.3)] py-2"
           />
+
+          <button className="p-1.5 rounded-full hover:bg-white/10 transition-colors">
+            <Paperclip className="h-5 w-5 text-[rgba(255,245,230,0.4)]" />
+          </button>
+
           <button
-            onClick={sendMessage}
+            onClick={handleSend}
             disabled={!draft.trim()}
-            className={`p-2.5 rounded-full ${
+            className={`p-2 rounded-full transition-all ${
               draft.trim()
-                ? "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black"
-                : "bg-white/5 text-gray-500 cursor-not-allowed"
+                ? "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black hover:scale-105 shadow-lg shadow-[rgba(255,215,0,0.2)]"
+                : "bg-[rgba(255,255,255,0.05)] text-[rgba(255,245,230,0.3)] cursor-not-allowed"
             }`}
           >
-            <Send className="h-5 w-5" />
+            <Send className="h-4 w-4" />
           </button>
         </div>
       </div>
