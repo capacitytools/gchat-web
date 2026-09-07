@@ -69,7 +69,7 @@ export function LivingOrb({ active, unread = 0 }: { active?: boolean; unread?: n
   );
 }
 
-export function ChatsListView({ setView, chats, onOpenChat }: Props) {
+export function ChatsListView({ setView, chats, onOpenChat, onNewChat }: Props) {
   const supabase = createClient();
   const [me, setMe] = useState<string>("");
   const [enriched, setEnriched] = useState<Enriched[]>([]);
@@ -82,6 +82,7 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
   const [actionsId, setActionsId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const touch = useRef<{ x: number; id: string } | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const say = (m: string): void => { setToast(m); setTimeout(() => setToast(null), 2200); };
 
@@ -188,28 +189,101 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
   }, [term, me, supabase]);
 
   const startChatWith = async (person: any): Promise<void> => {
+    if (isConnecting) return;
+    setIsConnecting(true);
+    
     try {
-      const { data: chat, error } = await supabase.from("chats")
-        .insert({ name: `Chat with ${person.display_name || person.username}`, created_by: me })
+      console.log("Starting chat with:", person);
+      
+      // Check if chat already exists with this person
+      const { data: existingMembers, error: checkError } = await supabase
+        .from("chat_members")
+        .select("chat_id")
+        .eq("user_id", me);
+
+      if (checkError) {
+        console.error("Error checking existing chats:", checkError);
+      }
+
+      let existingChatId = null;
+      if (existingMembers && existingMembers.length > 0) {
+        const chatIds = existingMembers.map((m: any) => m.chat_id);
+        
+        // Check if the other person is in any of these chats
+        const { data: otherMembers } = await supabase
+          .from("chat_members")
+          .select("chat_id")
+          .in("chat_id", chatIds)
+          .eq("user_id", person.id);
+
+        if (otherMembers && otherMembers.length > 0) {
+          existingChatId = otherMembers[0].chat_id;
+        }
+      }
+
+      if (existingChatId) {
+        // Chat exists, open it
+        const { data: chatData } = await supabase
+          .from("chats")
+          .select("*")
+          .eq("id", existingChatId)
+          .single();
+          
+        if (chatData) {
+          setHubOpen(false);
+          onOpenChat({ id: chatData.id, name: chatData.name, updated_at: chatData.created_at });
+          setIsConnecting(false);
+          return;
+        }
+      }
+
+      // Create new chat
+      const chatName = `Chat with ${person.display_name || person.username}`;
+      const { data: chat, error: chatError } = await supabase
+        .from("chats")
+        .insert({ 
+          name: chatName, 
+          created_by: me 
+        })
         .select()
         .single();
         
-      if (error || !chat) { 
-        say("Could not create chat"); 
-        return; 
+      if (chatError) {
+        console.error("Chat creation error:", chatError);
+        say("Could not create chat: " + chatError.message);
+        setIsConnecting(false);
+        return;
       }
       
-      await supabase.from("chat_members").insert([
+      if (!chat) {
+        say("Could not create chat");
+        setIsConnecting(false);
+        return;
+      }
+      
+      // Add members
+      const { error: memberError } = await supabase.from("chat_members").insert([
         { chat_id: chat.id, user_id: me, role: "owner" },
         { chat_id: chat.id, user_id: person.id, role: "member" },
       ]);
       
+      if (memberError) {
+        console.error("Member creation error:", memberError);
+        say("Failed to add members to chat");
+        setIsConnecting(false);
+        return;
+      }
+      
       setHubOpen(false);
+      say(`Chat with ${person.display_name || person.username} created!`);
       onOpenChat({ id: chat.id, name: chat.name, updated_at: chat.created_at });
+      
     } catch (err) {
       console.error("Error starting chat:", err);
-      say("Failed to start chat");
+      say("Failed to start chat. Please try again.");
     }
+    
+    setIsConnecting(false);
   };
 
   const markRead = (id: string): void => {
@@ -366,12 +440,15 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
                       left: `${15 + (h % 70)}%`, 
                       top: `${12 + ((h >> 2) % 68)}%`, 
                       animationDelay: `${(h % 10) / 5}s` 
-                    }} onClick={() => startChatWith(p)}>
+                    }} onClick={() => startChatWith(p)} disabled={isConnecting}>
                       <small>{(p.display_name || p.username || "?").slice(0, 8)}</small>
                     </button>
                   );
                 })}
               </div>
+              {isConnecting && (
+                <div className="text-center text-xs text-[#FFD700] mt-2">Connecting...</div>
+              )}
             </section>
 
             {/* Zone B — Smart Search */}
@@ -404,8 +481,8 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
                     <p className="text-sm text-[#FFF5E6] truncate">{p.display_name}</p>
                     <p className="text-[10px] text-[rgba(255,245,230,0.5)] truncate">@{p.username} · {p.email}</p>
                   </div>
-                  <button onClick={() => startChatWith(p)} className="px-3 py-1.5 rounded-lg bg-[#FFD700] text-black text-xs font-bold">
-                    Chat
+                  <button onClick={() => startChatWith(p)} disabled={isConnecting} className="px-3 py-1.5 rounded-lg bg-[#FFD700] text-black text-xs font-bold disabled:opacity-50">
+                    {isConnecting ? "..." : "Chat"}
                   </button>
                 </div>
               ))}
@@ -422,8 +499,8 @@ export function ChatsListView({ setView, chats, onOpenChat }: Props) {
                     </div>
                     <p className="text-xs text-[#FFF5E6] mt-2 truncate">{p.display_name || p.username}</p>
                     <p className="compat">⚡ {p.compat}% compatible</p>
-                    <button onClick={() => startChatWith(p)} className="mt-2 px-3 py-1 rounded-lg bg-white/10 text-[10px] text-[#FFF5E6]">
-                      Connect
+                    <button onClick={() => startChatWith(p)} disabled={isConnecting} className="mt-2 px-3 py-1 rounded-lg bg-white/10 text-[10px] text-[#FFF5E6] disabled:opacity-50">
+                      {isConnecting ? "..." : "Connect"}
                     </button>
                   </div>
                 ))}
