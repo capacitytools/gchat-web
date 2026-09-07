@@ -89,12 +89,6 @@ export function GChatApp() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // ============================================================
-  // PINNED CHATS & CONTACTS — NEW STATE
-  // ============================================================
-  const [pinnedChats, setPinnedChats] = useState<string[]>([]);
-  const [pinnedContacts, setPinnedContacts] = useState<string[]>([]);
-
   // Auth Check
   useEffect(() => {
     const checkUser = async () => {
@@ -121,15 +115,6 @@ export function GChatApp() {
     if (view === "profile" || view === "edit-profile" || view === "analytics") fetchProfile();
   }, [user, view]);
 
-  // Load pinned data from localStorage
-  useEffect(() => {
-    const savedPinnedChats = localStorage.getItem("gc_pinned_chats");
-    if (savedPinnedChats) setPinnedChats(JSON.parse(savedPinnedChats));
-    
-    const savedPinnedContacts = localStorage.getItem("gc_pinned_contacts");
-    if (savedPinnedContacts) setPinnedContacts(JSON.parse(savedPinnedContacts));
-  }, []);
-
   // Realtime messages
   useEffect(() => {
     if (!activeChatId) return;
@@ -141,7 +126,7 @@ export function GChatApp() {
     };
   }, [activeChatId]);
 
-  // Save OneSignal Device ID (immediately + on change)
+  // Save OneSignal Device ID
   useEffect(() => {
     if (typeof window === "undefined" || !user) return;
 
@@ -169,23 +154,33 @@ export function GChatApp() {
 
   const fetchChats = async () => {
     if (!user) return;
-    const { data } = await supabase.from("chat_members").select("chat_id, chats(id, name, created_at)").eq("user_id", user.id);
-    if (data) {
-      setChats(data.map((item: any) => ({ 
-        id: item.chats.id, 
-        name: item.chats.name, 
-        updated_at: item.chats.created_at 
-      })));
+    try {
+      const { data } = await supabase
+        .from("chat_members")
+        .select("chat_id, chats(id, name, created_at)")
+        .eq("user_id", user.id);
+      
+      if (data) {
+        setChats(data.map((item: any) => ({ 
+          id: item.chats.id, 
+          name: item.chats.name, 
+          updated_at: item.chats.created_at 
+        })));
+      }
+    } catch (err) {
+      console.error("Error fetching chats:", err);
     }
   };
 
   const fetchMessages = async (chatId: string) => {
-    const { data } = await supabase.from("messages").select("*").eq("chat_id", chatId).order("created_at", { ascending: true });
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("chat_id", chatId)
+      .order("created_at", { ascending: true });
+      
     if (data) {
-      const uniqueMessages = data.filter((msg: any, index: number, self: any[]) => 
-        index === self.findIndex(m => m.id === msg.id)
-      );
-      setMessages(uniqueMessages);
+      setMessages(data);
       
       const channel = supabase.channel(`chat:${chatId}`)
         .on("postgres_changes", { 
@@ -262,37 +257,26 @@ export function GChatApp() {
     }
   };
 
-  // Send message + trigger push notification
+  // Send message
   const sendMessage = async () => {
-    if (!draft.trim()) return;
+    if (!draft.trim() || !activeChatId) return;
     
-    const { data } = await supabase.from("messages").insert({ 
-      chat_id: activeChatId, 
-      user_id: user.id, 
-      text: draft,
-      status: "sent"
-    }).select().single();
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({ 
+        chat_id: activeChatId, 
+        user_id: user.id, 
+        text: draft.trim(),
+        status: "sent"
+      })
+      .select()
+      .single();
     
-    if (data) {
+    if (!error && data) {
       setMessages(prev => {
         if (prev.some(m => m.id === data.id)) return prev;
         return [...prev, data];
       });
-
-      try {
-        await fetch('/api/notify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: activeChatId,
-            message_text: draft,
-            sender_name: profile?.display_name || 'Someone',
-            sender_id: user.id
-          })
-        });
-      } catch (error) {
-        console.error("Failed to send notification", error);
-      }
     }
     setDraft("");
   };
@@ -537,7 +521,7 @@ export function GChatApp() {
     }
   };
 
-  // Search by username, display name, OR email (partial + case-insensitive)
+  // Search by username, display name, OR email
   const handleSearchUser = async () => {
     const term = searchUsername.trim();
     if (!term) {
@@ -569,7 +553,42 @@ export function GChatApp() {
 
   const handleCreateChat = async (target: any) => {
     try {
-      const { data: chat } = await supabase
+      // Check if chat already exists
+      const { data: existing } = await supabase
+        .from("chat_members")
+        .select("chat_id")
+        .eq("user_id", user.id);
+
+      let existingChatId = null;
+      if (existing && existing.length > 0) {
+        const chatIds = existing.map((m: any) => m.chat_id);
+        const { data: other } = await supabase
+          .from("chat_members")
+          .select("chat_id")
+          .in("chat_id", chatIds)
+          .eq("user_id", target.id);
+        if (other && other.length > 0) {
+          existingChatId = other[0].chat_id;
+        }
+      }
+
+      if (existingChatId) {
+        const { data: chat } = await supabase
+          .from("chats")
+          .select("*")
+          .eq("id", existingChatId)
+          .single();
+        if (chat) {
+          setShowNewChat(false);
+          setSearchUsername("");
+          setSearchResults([]);
+          openChat({ id: chat.id, name: chat.name, updated_at: chat.created_at });
+          return;
+        }
+      }
+
+      // Create new chat
+      const { data: chat, error: chatError } = await supabase
         .from("chats")
         .insert({
           name: `Chat with ${target.display_name || target.username}`,
@@ -578,19 +597,21 @@ export function GChatApp() {
         .select()
         .single();
 
-      if (chat) {
-        await supabase.from("chat_members").insert([
-          { chat_id: chat.id, user_id: user.id, role: "owner" },
-          { chat_id: chat.id, user_id: target.id, role: "member" }
-        ]);
-        setShowNewChat(false);
-        setSearchUsername("");
-        setSearchResults([]);
-        fetchChats();
-        setActiveChatId(chat.id);
-        setActiveChatName(chat.name);
-        setView("conversation");
+      if (chatError || !chat) {
+        alert("Failed to create chat");
+        return;
       }
+
+      await supabase.from("chat_members").insert([
+        { chat_id: chat.id, user_id: user.id, role: "owner" },
+        { chat_id: chat.id, user_id: target.id, role: "member" }
+      ]);
+
+      setShowNewChat(false);
+      setSearchUsername("");
+      setSearchResults([]);
+      fetchChats();
+      openChat({ id: chat.id, name: chat.name, updated_at: chat.created_at });
     } catch (err: any) {
       alert("Failed to create chat: " + err.message);
     }
@@ -601,55 +622,6 @@ export function GChatApp() {
     setActiveChatName(chat.name); 
     setView("conversation"); 
     setAiSummary(null); 
-  };
-
-  // ============================================================
-  // PIN FUNCTIONS — NEW
-  // ============================================================
-
-  // Pin Chat function
-  const handlePinChat = (chatId: string) => {
-    setPinnedChats((prev) => {
-      const newPinned = prev.includes(chatId)
-        ? prev.filter((id) => id !== chatId)
-        : [...prev, chatId];
-      localStorage.setItem("gc_pinned_chats", JSON.stringify(newPinned));
-      return newPinned;
-    });
-  };
-
-  // Pin Contact function
-  const handlePinContact = (contactId: string) => {
-    setPinnedContacts((prev) => {
-      const newPinned = prev.includes(contactId)
-        ? prev.filter((id) => id !== contactId)
-        : [...prev, contactId];
-      localStorage.setItem("gc_pinned_contacts", JSON.stringify(newPinned));
-      return newPinned;
-    });
-  };
-
-  // Delete Chat function
-  const handleDeleteChat = async (chatId: string) => {
-    try {
-      // Delete messages first
-      await supabase.from("messages").delete().eq("chat_id", chatId);
-      // Delete chat members
-      await supabase.from("chat_members").delete().eq("chat_id", chatId);
-      // Delete the chat
-      await supabase.from("chats").delete().eq("id", chatId);
-      
-      // Remove from pinned list if pinned
-      const updatedPinned = pinnedChats.filter((id) => id !== chatId);
-      setPinnedChats(updatedPinned);
-      localStorage.setItem("gc_pinned_chats", JSON.stringify(updatedPinned));
-      
-      // Refresh chat list
-      fetchChats();
-      setView("list");
-    } catch (err) {
-      console.error("Error deleting chat:", err);
-    }
   };
 
   if (loading) {
@@ -668,26 +640,20 @@ export function GChatApp() {
 
       {/* Render views based on state */}
       {view === "home" && <HomeView setView={setView} onLogout={() => supabase.auth.signOut()} />}
-      {view === "list" && <ChatsListView setView={setView} chats={chats} onOpenChat={openChat} onNewChat={() => setShowNewChat(true)} />}
+      
+      {view === "list" && (
+        <ChatsListView 
+          setView={setView} 
+          chats={chats} 
+          onOpenChat={openChat} 
+        />
+      )}
       
       {view === "conversation" && activeChatId && (
         <ConversationView
           setView={setView}
-          activeChatId={activeChatId}
-          activeChatName={activeChatName}
-          messages={messages}
+          chat={{ id: activeChatId, name: activeChatName }}
           userId={user.id}
-          draft={draft}
-          setDraft={setDraft}
-          onSendMessage={sendMessage}
-          onSendMoney={() => setShowSendMoney(true)}
-          onAISummary={generateAISummary}
-          aiSummary={aiSummary}
-          onDeleteChat={handleDeleteChat}
-          onPinChat={handlePinChat}
-          onPinContact={handlePinContact}
-          isPinned={pinnedChats.includes(activeChatId)}
-          isContactPinned={pinnedContacts.includes(activeChatId)}
         />
       )}
       
@@ -726,7 +692,7 @@ export function GChatApp() {
       {/* Notification Prompt */}
       <NotificationPrompt />
 
-      {/* NEW CHAT MODAL — search by username, name, or email */}
+      {/* NEW CHAT MODAL */}
       {showNewChat && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setShowNewChat(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-[#0B1120] border border-white/10 p-6" onClick={e => e.stopPropagation()}>
@@ -750,14 +716,11 @@ export function GChatApp() {
               </button>
             </div>
 
-            {/* Search results with full details */}
             <div className="max-h-72 overflow-y-auto space-y-2">
               {isSearching && <p className="text-center text-sm text-gray-400 py-4">Searching...</p>}
-
               {!isSearching && searchUsername.trim().length >= 2 && searchResults.length === 0 && (
                 <p className="text-center text-sm text-gray-500 py-4">No user found on G-Chat.</p>
               )}
-
               {searchResults.map((person) => (
                 <div key={person.id} className="p-3 rounded-xl bg-white/5 border border-white/5">
                   <div className="flex items-center gap-3">
