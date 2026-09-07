@@ -8,7 +8,6 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import "./chat-hub.css";
 
-// --- MATCHING TYPE DEFINITION ---
 type Chat = { 
   id: string; 
   name: string; 
@@ -103,10 +102,19 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat }: Props) 
 
   const say = (m: string): void => { setToast(m); setTimeout(() => setToast(null), 2200); };
 
-  /* session */
+  /* session - FIXED: use getUser() */
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => data.user && setMe(data.user.id));
-  }, [supabase]);
+    const getMe = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setMe(user.id);
+        console.log("✅ Me set to:", user.id);
+      } else {
+        console.log("❌ No user found");
+      }
+    };
+    getMe();
+  }, []);
 
   /* enrich chats with real message data */
   useEffect(() => {
@@ -165,7 +173,7 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat }: Props) 
         console.error("Error enriching chats:", err);
       }
     })();
-  }, [chats, me, supabase]);
+  }, [chats, me]);
 
   /* suggestions + radar (real profiles) */
   useEffect(() => {
@@ -183,7 +191,7 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat }: Props) 
         console.error("Error fetching suggestions:", err);
       }
     })();
-  }, [me, supabase]);
+  }, [me]);
 
   /* smart search (name / username / email) */
   useEffect(() => {
@@ -203,30 +211,38 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat }: Props) 
       }
     }, 400);
     return () => clearTimeout(t);
-  }, [term, me, supabase]);
+  }, [term, me]);
 
+  /* ============================================================
+     FIXED: startChatWith — uses getUser() directly
+     ============================================================ */
   const startChatWith = async (person: any): Promise<void> => {
     if (isConnecting) return;
     setIsConnecting(true);
     
     try {
-      console.log("Starting chat with:", person);
+      // Get current user directly
+      const { data: { user } } = await supabase.auth.getUser();
       
-      // Check if chat already exists with this person
-      const { data: existingMembers, error: checkError } = await supabase
+      if (!user) {
+        say("Please log in first");
+        setIsConnecting(false);
+        return;
+      }
+      
+      const userId = user.id;
+      console.log("✅ Current user ID:", userId);
+      console.log("✅ Target person:", person);
+      
+      // Check if chat already exists
+      const { data: existingMembers } = await supabase
         .from("chat_members")
         .select("chat_id")
-        .eq("user_id", me);
-
-      if (checkError) {
-        console.error("Error checking existing chats:", checkError);
-      }
+        .eq("user_id", userId);
 
       let existingChatId = null;
       if (existingMembers && existingMembers.length > 0) {
         const chatIds = existingMembers.map((m: any) => m.chat_id);
-        
-        // Check if the other person is in any of these chats
         const { data: otherMembers } = await supabase
           .from("chat_members")
           .select("chat_id")
@@ -239,7 +255,6 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat }: Props) 
       }
 
       if (existingChatId) {
-        // Chat exists, open it
         const { data: chatData } = await supabase
           .from("chats")
           .select("*")
@@ -254,49 +269,49 @@ export function ChatsListView({ setView, chats, onOpenChat, onNewChat }: Props) 
         }
       }
 
-      // Create new chat
+      // Create new chat with the user ID
       const chatName = `Chat with ${person.display_name || person.username}`;
+      console.log("📝 Creating chat:", chatName);
+      
       const { data: chat, error: chatError } = await supabase
         .from("chats")
         .insert({ 
           name: chatName, 
-          created_by: me 
+          created_by: userId
         })
         .select()
         .single();
         
       if (chatError) {
-        console.error("Chat creation error:", chatError);
+        console.error("❌ Chat creation error:", chatError);
         say("Could not create chat: " + chatError.message);
         setIsConnecting(false);
         return;
       }
       
-      if (!chat) {
-        say("Could not create chat");
-        setIsConnecting(false);
-        return;
-      }
+      console.log("✅ Chat created:", chat.id);
       
       // Add members
       const { error: memberError } = await supabase.from("chat_members").insert([
-        { chat_id: chat.id, user_id: me, role: "owner" },
+        { chat_id: chat.id, user_id: userId, role: "owner" },
         { chat_id: chat.id, user_id: person.id, role: "member" },
       ]);
       
       if (memberError) {
-        console.error("Member creation error:", memberError);
-        say("Failed to add members to chat");
+        console.error("❌ Member creation error:", memberError);
+        say("Failed to add members to chat: " + memberError.message);
         setIsConnecting(false);
         return;
       }
+      
+      console.log("✅ Members added successfully");
       
       setHubOpen(false);
       say(`Chat with ${person.display_name || person.username} created!`);
       onOpenChat({ id: chat.id, name: chat.name, updated_at: chat.created_at });
       
     } catch (err) {
-      console.error("Error starting chat:", err);
+      console.error("❌ Error starting chat:", err);
       say("Failed to start chat. Please try again.");
     }
     
