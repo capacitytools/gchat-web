@@ -370,11 +370,12 @@ export function ConversationView({
                     )}
                     {!isMine && !showAvatar && <div className="w-8 flex-shrink-0" />}
 
+                    {/* Message bubble with RED for outgoing, GREEN for incoming */}
                     <div
                       className={`max-w-[75%] px-4 py-2.5 rounded-2xl ${
                         isMine
-                          ? "bg-gradient-to-r from-[#FFD700] to-[#00F0FF] text-black rounded-br-sm shadow-lg shadow-[rgba(255,215,0,0.15)]"
-                          : "bg-emerald-500/20 text-[#FFF5E6] rounded-bl-sm border border-emerald-500/20 shadow-lg shadow-emerald-500/10"
+                          ? "bg-gradient-to-r from-[#FF2D95] to-[#B026FF] text-white rounded-br-sm shadow-lg shadow-[rgba(255,45,149,0.2)]"
+                          : "bg-gradient-to-r from-[#22c55e] to-[#16a34a] text-white rounded-bl-sm shadow-lg shadow-[rgba(34,197,94,0.2)]"
                       }`}
                     >
                       {msg.media_url && (
@@ -386,7 +387,7 @@ export function ConversationView({
                         />
                       )}
                       {msg.text && <p className="text-sm break-words">{msg.text}</p>}
-                      <p className={`text-[9px] mt-1 ${isMine ? "text-black/60" : "text-[rgba(255,245,230,0.4)]"}`}>
+                      <p className={`text-[9px] mt-1 ${isMine ? "text-white/60" : "text-white/60"}`}>
                         {formatTime(msg.created_at)}
                         {isMine && (
                           <span className="ml-2">
